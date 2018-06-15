@@ -19,6 +19,7 @@
 
 #include <iostream>
 #include <string>
+#include <memory>
 
 #include <stout/error.hpp>
 #include <stout/json.hpp>
@@ -30,6 +31,7 @@
 
 #include <mesos/docker/v1.hpp>
 #include <mesos/docker/v2.hpp>
+#include <mesos/docker/v2_2.hpp>
 
 namespace docker {
 namespace spec {
@@ -119,6 +121,48 @@ Try<ImageManifest> parse(const JSON::Object& json);
 Try<ImageManifest> parse(const std::string& s);
 
 } // namespace v2 {
+
+namespace v2_2 {
+
+// Validates if the specified docker v2 s2 image manifest conforms to the
+// Docker v2 s2 spec. Returns the error if the validation fails.
+Option<Error> validate(const ImageManifest& manifest);
+
+
+// Returns the docker v2 s2 image manifest from the given JSON object.
+Try<ImageManifest> parse(const JSON::Object& json);
+
+
+// Returns the docker v2 s2 image manifest from the given string.
+Try<ImageManifest> parse(const std::string& s);
+
+} // namespace v2_2 {
+
+enum class ManifestVersion { V1, V2S1, V2S2 };
+
+class ImageManifest {
+public:
+    ImageManifest(const v1::ImageManifest& _manifest);
+    ImageManifest(const v2::ImageManifest& _manifest);
+    ImageManifest(const v2_2::ImageManifest& _manifest);
+
+    Try<std::shared_ptr<v1::ImageManifest>> getV1();
+    Try<std::shared_ptr<v2::ImageManifest>> getV2S1();
+    Try<std::shared_ptr<v2_2::ImageManifest>> getV2S2();
+
+    ManifestVersion version();
+
+private:
+    std::shared_ptr<v1::ImageManifest> v1;
+    std::shared_ptr<v2::ImageManifest> v2s1;
+    std::shared_ptr<v2_2::ImageManifest> v2s2;
+
+    ManifestVersion ver;
+};
+
+Try<ImageManifest> parse(const JSON::Object& json);
+Try<ImageManifest> parse(const std::string& s);
+
 } // namespace spec {
 } // namespace docker {
 

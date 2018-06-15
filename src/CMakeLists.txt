@@ -44,6 +44,7 @@ PROTOC_GENERATE(TARGET mesos/authorizer/authorizer)
 PROTOC_GENERATE(TARGET mesos/docker/spec)
 PROTOC_GENERATE(TARGET mesos/docker/v1)
 PROTOC_GENERATE(TARGET mesos/docker/v2)
+PROTOC_GENERATE(TARGET mesos/docker/v2_2)
 PROTOC_GENERATE(TARGET mesos/maintenance/maintenance)
 PROTOC_GENERATE(TARGET mesos/master/master)
 PROTOC_GENERATE(TARGET mesos/module/hook)
@@ -166,6 +167,7 @@ set(AGENT_SRC
   slave/containerizer/mesos/mount.cpp
   slave/containerizer/mesos/paths.cpp
   slave/containerizer/mesos/io/switchboard.cpp
+  slave/containerizer/mesos/isolators/docker/runtime.cpp
   slave/containerizer/mesos/provisioner/backend.cpp
   slave/containerizer/mesos/provisioner/paths.cpp
   slave/containerizer/mesos/provisioner/provisioner.cpp
@@ -421,10 +423,8 @@ set(URI_SRC
   uri/fetchers/curl.cpp
   uri/fetchers/hadoop.cpp)
 
-if (NOT WIN32)
-  list(APPEND URI_SRC
-    uri/fetchers/docker.cpp)
-endif ()
+list(APPEND URI_SRC
+  uri/fetchers/docker.cpp)
 
 set(USAGE_SRC
   usage/usage.cpp)
