@@ -37,6 +37,8 @@
 #include <process/metrics/metrics.hpp>
 #include <process/metrics/timer.hpp>
 
+#include "common/command_utils.hpp"
+
 #include "slave/containerizer/mesos/provisioner/constants.hpp"
 #include "slave/containerizer/mesos/provisioner/utils.hpp"
 
@@ -362,11 +364,23 @@ Future<Image> StoreProcess::_get(
       .onAny(defer(self(), [=](const Future<Image>&) {
         pulling.erase(name);
 
+#ifdef __WINDOWS__
+        command::wclayer_remove(Path(staging.get()))
+          .onAny([=](const Future<Nothing>& result) {
+            if (result.isFailed()) {
+              LOG(WARNING) << "Failed to remove staging directory: "
+                           << result.failure();
+            } else if (os::exists(staging.get())) {
+              LOG(WARNING) << "Failed to remove staging directory";
+            }
+          });
+#else
         Try<Nothing> rmdir = os::rmdir(staging.get());
         if (rmdir.isError()) {
           LOG(WARNING) << "Failed to remove staging directory: "
                        << rmdir.error();
         }
+#endif
       })));
 
     promise->associate(future);
