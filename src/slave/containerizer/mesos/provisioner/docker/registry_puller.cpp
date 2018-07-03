@@ -359,7 +359,14 @@ Future<vector<string>> RegistryPullerProcess::___pull(
   // sure ids are unique.
   hashset<string> uniqueIds;
   vector<string> layerIds;
+#ifdef __WINDOWS__
+  vector<Path> tarPaths;
+  shared_ptr<vector<Path>> layerPaths(new vector<Path>);
+
+  Future<Nothing> future;
+#else
   vector<Future<Nothing>> futures;
+#endif // __WINDOWS__
 
   // The order of `fslayers` should be [child, parent, ...].
   //
@@ -378,7 +385,7 @@ Future<vector<string>> RegistryPullerProcess::___pull(
 
     // NOTE: We put parent layer ids in front because that's what the
     // provisioner backends assume.
-    layerIds.insert(layerIds.begin(), v1.id());
+    layerIds.emplace_back(v1.id());
     uniqueIds.insert(v1.id());
 
     // Skip if the layer is already in the store.
@@ -410,10 +417,42 @@ Future<vector<string>> RegistryPullerProcess::___pull(
           v1.id() + "': " + write.error());
     }
 
+#ifdef __WINDOWS__
+    tarPaths.emplace_back(tar);
+    layerPaths->emplace_back(rootfs);
+#else
     futures.push_back(command::untar(Path(tar), Path(rootfs)));
+#endif // __WINDOWS__
   }
 
+#ifdef __WINDOWS__
+  // Both `tarPaths` and `layerPaths` have their last element belongs to base.
+  //
+  // Inefficient O(n^2) if number of layers is huge due to copying a range of 
+  // layers for each wclayer call.
+  if (!tarPaths.empty()) {
+    auto tar = tarPaths.crbegin();
+    auto rootfs = layerPaths->crbegin();
+    future = command::wclayer_import(*tar,
+        vector<Path>(layerPaths->crbegin(), rootfs),
+        *rootfs);
+    ++tar;
+    ++rootfs;
+    for (; tar < tarPaths.crend(); ++tar, ++rootfs) {
+      Path tarPath = *tar;
+      future = future.then([=]() {
+        return command::wclayer_import(tarPath,
+            vector<Path>(layerPaths->crbegin(), rootfs),
+            *rootfs);
+      });
+    }
+  } else {
+    future = Nothing();
+  }
+  return future
+#else
   return collect(futures)
+#endif
     .then([=]() -> Future<vector<string>> {
       // Remove the tarballs after the extraction.
       foreach (const string& blobSum, blobSums) {
@@ -427,7 +466,7 @@ Future<vector<string>> RegistryPullerProcess::___pull(
         }
       }
 
-      return layerIds;
+      return vector<string>(layerIds.crbegin(), layerIds.crend());
     });
 }
 
