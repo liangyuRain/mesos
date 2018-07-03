@@ -17,6 +17,8 @@
 #ifndef __COMMON_COMMAND_UTILS_HPP__
 #define __COMMON_COMMAND_UTILS_HPP__
 
+#include <vector>
+
 #include <process/process.hpp>
 
 #include <stout/option.hpp>
@@ -60,6 +62,30 @@ process::Future<Nothing> untar(
     const Option<Path>& directory = None());
 
 // TODO(Jojy): Add more overloads/options for untar (eg., keep existing files)
+
+
+#ifdef __WINDOWS__
+/**
+ * Windows way of extracting file layers
+ *
+ * @param input path to the downloaded compressed layer file
+ * @param layers list of paths to extracted parent layers [base, ...]
+ * @param directory path to extract the compressed layer
+ */
+process::Future<Nothing> wclayer_import(
+    const Path& input,
+    const std::vector<Path>& layers,
+    const Path& directory);
+
+
+/**
+ * Windows way of removing downloaded compressed layer file. The file can only
+ * be removed by wclayer because of special authorization.
+ *
+ * @param directory path to remove
+ */
+process::Future<Nothing> wclayer_remove(const Path& directory);
+#endif // __WINDOWS__
 
 
 /**
