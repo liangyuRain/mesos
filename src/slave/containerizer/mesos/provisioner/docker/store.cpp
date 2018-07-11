@@ -136,6 +136,12 @@ private:
       const string& layerId,
       const string& backend);
 
+#ifdef __WINDOWS__
+  Future<Nothing> _moveLayer(
+      const string& source,
+      const string& target);
+#endif
+
   Future<Nothing> _prune(
       const hashset<string>& activeLayerPaths,
       const hashset<string>& retainedImageLayers);
@@ -480,6 +486,17 @@ Future<Nothing> StoreProcess::moveLayer(
       flags.docker_store_dir,
       layerId);
 
+#ifdef __WINDOWS__
+  const string layers = path::join(flags.docker_store_dir, "layers");
+  if (!os::exists(layers)) {
+    Try<Nothing> mkdir = os::mkdir(layers);
+    if (mkdir.isError()) {
+      return Failure(
+          "Failed to create layers folder: " + mkdir.error());
+    }
+  }
+#endif
+
 #ifdef __linux__
   // If the backend is "overlay", we need to convert
   // AUFS whiteout files to OverlayFS whiteout files.
@@ -493,6 +510,22 @@ Future<Nothing> StoreProcess::moveLayer(
   }
 #endif
 
+#ifdef __WINDOWS__
+  if (os::exists(target)) {
+    return command::wclayer_remove(Path(target))
+      .onAny(defer(self(), [=](const Future<Nothing>& future)
+          -> Future<Nothing> {
+        if (future.isFailed()) {
+          return Failure("Failed to remove existing layer '" + layerId +
+              "': " + future.failure());
+        } else {
+          return _moveLayer(source, target);
+        }
+      }));
+  } else {
+    return _moveLayer(source, target);
+  }
+#else
   if (!os::exists(target)) {
     // This is the case that we pull the layer for the first time.
     Try<Nothing> mkdir = os::mkdir(target);
@@ -520,7 +553,27 @@ Future<Nothing> StoreProcess::moveLayer(
   }
 
   return Nothing();
+#endif
 }
+
+
+#ifdef __WINDOWS__
+
+Future<Nothing> StoreProcess::_moveLayer(
+      const string& source,
+      const string& target)
+{
+  Try<Nothing> rename = os::rename(source, target);
+  if (rename.isError()) {
+    return Failure(
+        "Failed to move layer from '" + source +
+        "' to '" + target + "': " + rename.error());
+  }
+
+  return Nothing();
+}
+
+#endif
 
 
 Future<Nothing> StoreProcess::prune(
