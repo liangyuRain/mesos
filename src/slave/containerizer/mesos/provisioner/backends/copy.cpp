@@ -309,6 +309,13 @@ Future<Nothing> CopyBackendProcess::_provision(
 
 Future<bool> CopyBackendProcess::destroy(const string& rootfs)
 {
+#ifdef __WINDOWS__
+  Try<Nothing> rmdir = os::rmdir(rootfs);
+  if (rmdir.isError()) {
+    return Failure("Failed to destroy rootfs: " + rmdir.error());
+  }
+  return true;
+#else
   vector<string> argv{"rm", "-rf", rootfs};
 
   Try<Subprocess> s = subprocess(
@@ -333,6 +340,7 @@ Future<bool> CopyBackendProcess::destroy(const string& rootfs)
 
       return true;
     });
+#endif
 }
 
 } // namespace slave {
