@@ -73,7 +73,7 @@ bool operator==(deque<T> rhs, deque<T> lhs)
 
 TEST(RecordIOTest, Encoder)
 {
-  recordio::Encoder<string> encoder(strings::upper);
+  recordio::Encoder<string> encoder(strings::upper<const string&>);
 
   string data;
 

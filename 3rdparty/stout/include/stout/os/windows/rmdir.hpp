@@ -73,7 +73,7 @@ inline Try<Nothing> recursive_remove_directory(
 
     if (search_handle.get() == INVALID_HANDLE_VALUE) {
       return WindowsError(
-          "FindFirstFile failed for pattern " + stringify(search_pattern));
+          "FindFirstFile failed for pattern " + short_stringify(search_pattern));
     }
 
     do {
@@ -95,12 +95,13 @@ inline Try<Nothing> recursive_remove_directory(
 
       // Depth-first search, deleting files and directories.
       Try<Nothing> removed = recursive_remove_directory(
-          stringify(current_absolute_path), true, continueOnError);
+          short_stringify(current_absolute_path), true, continueOnError);
 
       if (removed.isError()) {
         if (continueOnError) {
           LOG(WARNING) << "Failed to delete path "
-                       << stringify(current_absolute_path) << " with error "
+                       << short_stringify(current_absolute_path)
+                       << " with error "
                        << removed.error();
         } else {
           return Error(removed.error());
