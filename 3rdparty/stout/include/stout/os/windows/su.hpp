@@ -94,7 +94,7 @@ inline Result<std::string> user(Option<uid_t> uid = None())
     return WindowsError("os::user: Failed to get username from OS");
   }
 
-  return stringify(std::wstring(user_name.data()));
+  return short_stringify(std::wstring(user_name.data()));
 }
 
 

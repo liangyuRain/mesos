@@ -46,8 +46,8 @@ inline std::map<std::string, std::string> environment()
       continue; // Skip malformed environment entries.
     }
 
-    result[stringify(entry.substr(0, position))] =
-      stringify(entry.substr(position + 1));
+    result[short_stringify(entry.substr(0, position))] =
+        short_stringify(entry.substr(position + 1));
   }
 
   return result;
