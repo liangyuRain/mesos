@@ -994,7 +994,7 @@ int main(int argc, char** argv)
   // `SharedHandle`, because it will (purposefully) never go out of scope.
   Try<SharedHandle> handle = os::open_job(JOB_OBJECT_QUERY, false, name.get());
   if (handle.isError()) {
-    cerr << "Failed to open job object '" << stringify(name.get())
+    cerr << "Failed to open job object '" << narrow_stringify(name.get())
          << "' for the current container: " << handle.error() << endl;
     return EXIT_FAILURE;
   }
