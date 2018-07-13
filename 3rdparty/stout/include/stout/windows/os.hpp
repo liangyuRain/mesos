@@ -77,7 +77,7 @@ inline Try<std::string> nodename()
     return WindowsError();
   }
 
-  return stringify(std::wstring(buffer.data()));
+  return narrow_stringify(std::wstring(buffer.data()));
 }
 
 
@@ -572,7 +572,7 @@ inline Result<Process> process(pid_t pid)
       Bytes(proc_mem_counters.WorkingSetSize),
       utime.isSome() ? utime.get() : Option<Duration>::none(),
       stime.isSome() ? stime.get() : Option<Duration>::none(),
-      stringify(entry.get().szExeFile),        // Executable filename.
+      narrow_stringify(entry.get().szExeFile),        // Executable filename.
       false);                                  // Is not zombie process.
 }
 
@@ -601,7 +601,7 @@ inline Try<std::string> var()
     return WindowsError("os::var: `GetAllUsersProfileDirectoryW` failed");
   }
 
-  return stringify(std::wstring(buffer.data()));
+  return narrow_stringify(std::wstring(buffer.data()));
 }
 
 

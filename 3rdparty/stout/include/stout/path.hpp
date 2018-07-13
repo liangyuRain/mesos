@@ -38,50 +38,74 @@ namespace path {
 // NOTE: Currently, Mesos uses URIs and files somewhat interchangably.
 // For compatibility, lack of "file://" prefix is not considered an
 // error.
-inline std::string from_uri(const std::string& uri)
+template <typename T>
+inline GET_TYPE(T) from_uri(T&& uri)
 {
+  typedef GET_TYPE(T) STRING;
+
   // Remove the optional "file://" if it exists.
   // TODO(coffler): Remove the `hostname` component.
-  const std::string path = strings::remove(uri, "file://", strings::PREFIX);
+  const STRING path = strings::remove(std::forward<T>(uri),
+      string_convert<typename STRING::value_type>("file://"),
+      strings::PREFIX);
 
 #ifndef __WINDOWS__
   return path;
 #else
-  return strings::replace(path, "/", "\\");
+  return strings::replace(path,
+      string_convert<typename STRING::value_type>("/"),
+      string_convert<typename STRING::value_type>("\\"));
 #endif // __WINDOWS__
 }
 
 
 // Base case.
-inline std::string join(
-    const std::string& path1,
-    const std::string& path2,
-    const char _separator = os::PATH_SEPARATOR)
+template <typename T1, typename T2>
+inline GET_TYPE(T1) join(
+    T1&& path1,
+    T2&& path2,
+    const char _separator)
 {
-  const std::string separator = stringify(_separator);
-  return strings::remove(path1, separator, strings::SUFFIX) +
+  typedef GET_TYPE(T1) STRING;
+  const STRING separator =
+      string_convert<typename STRING::value_type>(_separator);
+  return strings::remove(std::forward<T1>(path1), separator, strings::SUFFIX) +
          separator +
-         strings::remove(path2, separator, strings::PREFIX);
+         strings::remove(std::forward<T2>(path2), separator, strings::PREFIX);
 }
 
 
-template <typename... Paths>
-inline std::string join(
-    const std::string& path1,
-    const std::string& path2,
+template <typename T1, typename T2>
+inline GET_TYPE(T1) join(
+    T1&& path1,
+    T2&& path2)
+{
+  return join(std::forward<T1>(path1),
+      std::forward<T2>(path2),
+      os::PATH_SEPARATOR);
+}
+
+
+template <typename T1, typename T2, typename... Paths>
+inline GET_TYPE(T1) join(
+    T1&& path1,
+    T2&& path2,
     Paths&&... paths)
 {
-  return join(path1, join(path2, std::forward<Paths>(paths)...));
+  return join(std::forward<T1>(path1),
+      join(std::forward<T2>(path2), std::forward<Paths>(paths)...));
 }
 
 
-inline std::string join(const std::vector<std::string>& paths)
+template <typename T>
+inline std::basic_string<T> join(
+    const std::vector<std::basic_string<T>>& paths)
 {
   if (paths.empty()) {
-    return "";
+    return std::basic_string<T>();
   }
 
-  std::string result = paths[0];
+  std::basic_string<T> result = paths[0];
   for (size_t i = 1; i < paths.size(); ++i) {
     result = join(result, paths[i]);
   }
@@ -93,10 +117,14 @@ inline std::string join(const std::vector<std::string>& paths)
  * Returns whether the given path is an absolute path.
  * If an invalid path is given, the return result is also invalid.
  */
-inline bool absolute(const std::string& path)
+template <typename T>
+inline bool absolute(T&& path)
 {
+  typedef GET_TYPE(T) STRING;
+  const STRING& path_str(stringify(std::forward<T>(path)));
 #ifndef __WINDOWS__
-  return strings::startsWith(path, os::PATH_SEPARATOR);
+  return strings::startsWith(path_str,
+      string_convert<typename STRING::value_type>(os::PATH_SEPARATOR));
 #else
   // NOTE: We do not use `PathIsRelative` Windows utility function
   // here because it does not support long paths.
@@ -113,23 +141,25 @@ inline bool absolute(const std::string& path)
 
   // A uniform naming convention (UNC) name of any format,
   // always starts with two backslash characters.
-  if (strings::startsWith(path, "\\\\")) {
+  if (strings::startsWith(path_str,
+      string_convert<typename STRING::value_type>("\\\\"))) {
     return true;
   }
 
   // A disk designator with a slash, for example "C:\" or "d:/".
-  if (path.length() < 3) {
+  if (path_str.length() < 3) {
     return false;
   }
 
-  const char letter = path[0];
+  const STRING::value_type letter = path_str[0];
   if (!((letter >= 'A' && letter <= 'Z') ||
         (letter >= 'a' && letter <= 'z'))) {
     return false;
   }
 
-  std::string colon = path.substr(1, 2);
-  return colon == ":\\" || colon == ":/";
+  STRING colon = path_str.substr(1, 2);
+  return colon == string_convert<typename STRING::value_type>(":\\") ||
+      colon == string_convert<typename STRING::value_type>(":/");
 #endif // __WINDOWS__
 }
 
@@ -166,14 +196,18 @@ inline std::string replaceColon(std::string path, char ch = '_')
  * to the path separator character, so read it as "'/' or '\', depending on
  * platform".
  */
-class Path
+template <typename T>
+class basic_path
 {
 public:
-  Path() : value(), separator(os::PATH_SEPARATOR) {}
+  basic_path() : value(), separator((T) os::PATH_SEPARATOR) {}
 
-  explicit Path(
-      const std::string& path, const char path_separator = os::PATH_SEPARATOR)
-    : value(strings::remove(path, "file://", strings::PREFIX)),
+  explicit basic_path(
+      const std::basic_string<T>& path,
+      const T path_separator = (T) os::PATH_SEPARATOR)
+    : value(strings::remove(path,
+                            string_convert<T>("file://"),
+                            strings::PREFIX)),
       separator(path_separator)
   {}
 
@@ -203,10 +237,10 @@ public:
    *   string "/", then this returns the string "/". If Path is an
    *   empty string, then it returns the string ".".
    */
-  inline std::string basename() const
+  inline std::basic_string<T> basename() const
   {
     if (value.empty()) {
-      return std::string(".");
+      return string_convert<T>(".");
     }
 
     size_t end = value.size() - 1;
@@ -216,7 +250,7 @@ public:
       end = value.find_last_not_of(separator, end);
 
       // Paths containing only slashes result into "/".
-      if (end == std::string::npos) {
+      if (end == std::basic_string<T>::npos) {
         return stringify(separator);
       }
     }
@@ -225,7 +259,7 @@ public:
     // that is non trailing.
     size_t start = value.find_last_of(separator, end);
 
-    if (start == std::string::npos) {
+    if (start == std::basic_string<T>::npos) {
       start = 0;
     } else {
       start++;
@@ -262,10 +296,10 @@ public:
    *   If Path is the string "/", then this returns the string "/".
    *   If Path is an empty string, then this returns the string ".".
    */
-  inline std::string dirname() const
+  inline std::basic_string<T> dirname() const
   {
     if (value.empty()) {
-      return std::string(".");
+      return string_convert<T>(".");
     }
 
     size_t end = value.size() - 1;
@@ -279,8 +313,8 @@ public:
     end = value.find_last_of(separator, end);
 
     // Paths containing no slashes result in ".".
-    if (end == std::string::npos) {
-      return std::string(".");
+    if (end == std::basic_string<T>::npos) {
+      return string_convert<T>(".");
     }
 
     // Paths containing only slashes result in "/".
@@ -293,7 +327,7 @@ public:
     end = value.find_last_not_of(separator, end);
 
     // Paths containing no non slash characters result in "/".
-    if (end == std::string::npos) {
+    if (end == std::basic_string<T>::npos) {
       return stringify(separator);
     }
 
@@ -317,12 +351,14 @@ public:
    *   "."          |  None
    *   ".."         |  None
    */
-  inline Option<std::string> extension() const
+  inline Option<std::basic_string<T>> extension() const
   {
-    std::string _basename = basename();
-    size_t index = _basename.rfind('.');
+    std::basic_string<T> _basename = basename();
+    size_t index = _basename.rfind((T) '.');
 
-    if (_basename == "." || _basename == ".." || index == std::string::npos) {
+    if (_basename == string_convert<T>(".") ||
+        _basename == string_convert<T>("..") ||
+        index == std::basic_string<T>::npos) {
       return None();
     }
 
@@ -336,61 +372,72 @@ public:
   }
 
   // Implicit conversion from Path to string.
-  operator std::string() const
+  operator std::basic_string<T>() const
   {
     return value;
   }
 
-  const std::string& string() const
+  const std::basic_string<T>& string() const
   {
     return value;
   }
 
 private:
-  std::string value;
-  char separator;
+  std::basic_string<T> value;
+  T separator;
 };
 
 
-inline bool operator==(const Path& left, const Path& right)
+typedef basic_path<char> Path;
+typedef basic_path<wchar_t> WPath;
+
+
+template <typename T>
+inline bool operator==(const basic_path<T>& left, const basic_path<T>& right)
 {
   return left.string() == right.string();
 }
 
 
-inline bool operator!=(const Path& left, const Path& right)
+template <typename T>
+inline bool operator!=(const basic_path<T>& left, const basic_path<T>& right)
 {
   return !(left == right);
 }
 
 
-inline bool operator<(const Path& left, const Path& right)
+template <typename T>
+inline bool operator<(const basic_path<T>& left, const basic_path<T>& right)
 {
   return left.string() < right.string();
 }
 
 
-inline bool operator>(const Path& left, const Path& right)
+template <typename T>
+inline bool operator>(const basic_path<T>& left, const basic_path<T>& right)
 {
   return right < left;
 }
 
 
-inline bool operator<=(const Path& left, const Path& right)
+template <typename T>
+inline bool operator<=(const basic_path<T>& left, const basic_path<T>& right)
 {
   return !(left > right);
 }
 
 
-inline bool operator>=(const Path& left, const Path& right)
+template <typename T>
+inline bool operator>=(const basic_path<T>& left, const basic_path<T>& right)
 {
   return !(left < right);
 }
 
 
+template <typename T>
 inline std::ostream& operator<<(
     std::ostream& stream,
-    const Path& path)
+    const basic_path<T>& path)
 {
   return stream << path.string();
 }

@@ -374,7 +374,7 @@ inline Try<ProcessData> create_process(
   if (result == FALSE) {
     return WindowsError(
         create_process_error,
-        "Failed to call `CreateProcess`: " + stringify(arg_string));
+        "Failed to call `CreateProcess`: " + narrow_stringify(arg_string));
   }
 
   return ProcessData{SharedHandle{process_info.hProcess, ::CloseHandle},
@@ -444,7 +444,7 @@ Try<std::string> shell(const std::string& fmt, const T&... t)
     }
 
     for (int i = 0; i < argc; ++i) {
-      args.push_back(stringify(std::wstring(argv.get()[i])));
+      args.push_back(narrow_stringify(std::wstring(argv.get()[i])));
     }
   }
 
