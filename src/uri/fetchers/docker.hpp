@@ -58,6 +58,12 @@ public:
       const std::string& directory,
       const Option<std::string>& data = None()) const;
 
+  virtual process::Future<Nothing> fetch(
+      const URI& uri,
+      const std::vector<std::string>& urls,
+      const std::string& directory,
+      const Option<std::string>& data = None()) const;
+
 private:
   explicit DockerFetcherPlugin(
       process::Owned<DockerFetcherPluginProcess> _process);
