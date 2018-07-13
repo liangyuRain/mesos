@@ -55,7 +55,7 @@ inline Try<std::string> mktemp(
     return WindowsError();
   }
 
-  const std::string temp_file = stringify(std::wstring(buffer.data()));
+  const std::string temp_file = narrow_stringify(std::wstring(buffer.data()));
 
   // NOTE: We open the file with read/write access for the given user, an
   // attempt to match POSIX's specification of `mkstemp`. We use `_S_IREAD` and
