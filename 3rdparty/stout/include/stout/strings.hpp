@@ -25,7 +25,8 @@
 #include "option.hpp"
 #include "stringify.hpp"
 
-#define FIX_CSTR(X) X(fix_cstr(X))
+#define GET_TYPE(X) typename \
+    std::remove_const<typename std::remove_reference<decltype(X)>::type>::type
 
 namespace strings {
 
@@ -41,13 +42,13 @@ enum Mode
 
 template <typename T>
 static inline std::basic_string<T> fix_cstr(const T* cstr) {
-	return std::basic_string<T>(cstr);
+  return std::basic_string<T>(cstr);
 }
 
 template <typename T>
 static inline const std::basic_string<T>& fix_cstr(
     const std::basic_string<T>& str) {
-	return str;
+  return str;
 }
 
 template <typename T>
@@ -59,29 +60,29 @@ template <typename T1, typename T2>
 inline auto remove(
     const T1& from,
     const T2& substring,
-    Mode mode = ANY)
+    Mode mode = ANY) -> GET_TYPE(fix_cstr(from))
 {
-  {
-    auto FIX_CSTR(from), FIX_CSTR(substring);
-    auto result = from;
+  typedef GET_TYPE(fix_cstr(from)) STRING;
+  const STRING& from_str(fix_cstr(from)), substring_str(fix_cstr(substring));
+  STRING result = from_str;
 
-    if (mode == PREFIX) {
-      if (from.find(substring) == 0) {
-        result = from.substr(substring.size());
-      }
-    } else if (mode == SUFFIX) {
-      if (from.rfind(substring) == from.size() - substring.size()) {
-        result = from.substr(0, from.size() - substring.size());
-      }
-    } else {
-      size_t index;
-      while ((index = result.find(substring)) != std::string::npos) {
-        result = result.erase(index, substring.size());
-      }
+  if (mode == PREFIX) {
+    if (from_str.find(substring_str) == 0) {
+      result = from_str.substr(substring_str.size());
     }
-
-    return result;
+  } else if (mode == SUFFIX) {
+    if (from_str.rfind(substring_str) ==
+        from_str.size() - substring_str.size()) {
+      result = from_str.substr(0, from_str.size() - substring_str.size());
+    }
+  } else {
+    size_t index;
+    while ((index = result.find(substring_str)) != std::string::npos) {
+      result = result.erase(index, substring_str.size());
+    }
   }
+
+  return result;
 }
 
 
@@ -89,49 +90,46 @@ template <typename T1, typename T2>
 inline auto trim(
     const T1& from,
     Mode mode,
-    const T2& chars)
+    const T2& chars) -> GET_TYPE(fix_cstr(from))
 {
-  {
-    auto FIX_CSTR(from), FIX_CSTR(chars);
-    typedef decltype(from) STRING;
-    size_t start = 0;
-    Option<size_t> end = None();
+  typedef GET_TYPE(fix_cstr(from)) STRING;
+  const STRING& from_str(fix_cstr(from)), chars_str(fix_cstr(chars));
+  size_t start = 0;
+  Option<size_t> end = None();
 
-    if (mode == ANY) {
-      start = from.find_first_not_of(chars);
-      end = from.find_last_not_of(chars);
-    } else if (mode == PREFIX) {
-      start = from.find_first_not_of(chars);
-    } else if (mode == SUFFIX) {
-      end = from.find_last_not_of(chars);
-    }
-
-    // Bail early if 'from' contains only characters in 'chars'.
-    if (start == STRING::npos) {
-      return STRING();
-    }
-
-    // Calculate the length of the substring, defaulting to the "end" of
-    // string if there were no characters to remove from the suffix.
-    size_t length = STRING::npos;
-
-    // Found characters to trim at the end.
-    if (end.isSome() && end.get() != STRING::npos) {
-      length = end.get() + 1 - start;
-    }
-
-    return from.substr(start, length);
+  if (mode == ANY) {
+    start = from_str.find_first_not_of(chars_str);
+    end = from_str.find_last_not_of(chars_str);
+  } else if (mode == PREFIX) {
+    start = from_str.find_first_not_of(chars_str);
+  } else if (mode == SUFFIX) {
+    end = from_str.find_last_not_of(chars_str);
   }
+
+  // Bail early if 'from' contains only characters in 'chars'.
+  if (start == STRING::npos) {
+    return STRING();
+  }
+
+  // Calculate the length of the substring, defaulting to the "end" of
+  // string if there were no characters to remove from the suffix.
+  size_t length = STRING::npos;
+
+  // Found characters to trim at the end.
+  if (end.isSome() && end.get() != STRING::npos) {
+    length = end.get() + 1 - start;
+  }
+
+  return from_str.substr(start, length);
 }
 
 template <typename T>
-inline auto trim(const T& from, Mode mode = ANY) {
-  {
-    auto FIX_CSTR(from);
-    typedef decltype(from) STRING;
-    STRING chars(fix_literal<STRING::value_type>(WHITESPACE));
-    return trim<STRING, STRING>(from, mode, chars);
-  }
+inline auto trim(const T& from, Mode mode = ANY) -> GET_TYPE(fix_cstr(from))
+{
+  typedef GET_TYPE(fix_cstr(from)) STRING;
+  const STRING& from_str(fix_cstr(from));
+  STRING chars(fix_literal<typename STRING::value_type>(WHITESPACE));
+  return trim<STRING, STRING>(from_str, mode, chars);
 }
 
 // Helper providing some syntactic sugar for when 'mode' is ANY but
