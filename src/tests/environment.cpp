@@ -523,7 +523,11 @@ class InternetFilter : public TestFilter
 public:
   InternetFilter()
   {
+#ifdef __WINDOWS__
+    error = os::system("ping -n 1 -w 1000 google.com") != 0;
+#else
     error = os::system("ping -c 1 -W 1 google.com") != 0;
+#endif
     // TODO(andschwa): Make ping command cross-platform.
     if (error) {
       std::cerr
