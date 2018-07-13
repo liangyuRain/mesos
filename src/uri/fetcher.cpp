@@ -24,6 +24,7 @@
 
 using std::string;
 using std::vector;
+using std::shared_ptr;
 
 using process::Failure;
 using process::Future;
@@ -52,11 +53,8 @@ Try<Owned<Fetcher>> create(const Option<Flags>& _flags)
        [flags]() { return CopyFetcherPlugin::create(flags); }},
     {HadoopFetcherPlugin::NAME,
        [flags]() { return HadoopFetcherPlugin::create(flags); }},
-#ifndef __WINDOWS__
-    // TODO(coffler): Enable Docker plugin. See MESOS-8570.
     {DockerFetcherPlugin::NAME,
        [flags]() { return DockerFetcherPlugin::create(flags); }},
-#endif // __WINDOWS__
   };
 
   vector<Owned<Fetcher::Plugin>> plugins;
@@ -78,6 +76,17 @@ Try<Owned<Fetcher>> create(const Option<Flags>& _flags)
 }
 
 } // namespace fetcher {
+
+
+Future<Nothing> Fetcher::Plugin::fetch(
+    const URI& uri,
+    shared_ptr<vector<string>> urls,
+    const string& directory,
+    const Option<string>& data) const
+{
+  return fetch(uri, directory, data);
+}
+
 
 Fetcher::Fetcher(const vector<Owned<Plugin>>& plugins)
 {
@@ -113,6 +122,19 @@ Future<Nothing> Fetcher::fetch(
   }
 
   return pluginsByScheme.at(uri.scheme())->fetch(uri, directory, data);
+}
+
+Future<Nothing> Fetcher::fetch(
+    const URI& uri,
+    shared_ptr<vector<string>> urls,
+    const string& directory,
+    const Option<string>& data) const
+{
+  if (!pluginsByScheme.contains(uri.scheme())) {
+    return Failure("Scheme '" + uri.scheme() + "' is not supported");
+  }
+
+  return pluginsByScheme.at(uri.scheme())->fetch(uri, urls, directory, data);
 }
 
 
