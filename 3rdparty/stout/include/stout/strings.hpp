@@ -25,6 +25,8 @@
 #include "option.hpp"
 #include "stringify.hpp"
 
+#define FIX_CSTR(X) X(fix_cstr(X))
+
 namespace strings {
 
 const std::string WHITESPACE = " \t\n\r";
@@ -37,67 +39,100 @@ enum Mode
   ANY
 };
 
+template <typename T>
+static inline std::basic_string<T> fix_cstr(const T* cstr) {
+	return std::basic_string<T>(cstr);
+}
 
-inline std::string remove(
-    const std::string& from,
-    const std::string& substring,
+template <typename T>
+static inline const std::basic_string<T>& fix_cstr(
+    const std::basic_string<T>& str) {
+	return str;
+}
+
+template <typename T>
+static inline std::basic_string<T> fix_literal(const std::string& str) {
+  return std::basic_string<T>(str.cbegin(), str.cend());
+}
+
+template <typename T1, typename T2>
+inline auto remove(
+    const T1& from,
+    const T2& substring,
     Mode mode = ANY)
 {
-  std::string result = from;
+  {
+    auto FIX_CSTR(from), FIX_CSTR(substring);
+    auto result = from;
 
-  if (mode == PREFIX) {
-    if (from.find(substring) == 0) {
-      result = from.substr(substring.size());
+    if (mode == PREFIX) {
+      if (from.find(substring) == 0) {
+        result = from.substr(substring.size());
+      }
+    } else if (mode == SUFFIX) {
+      if (from.rfind(substring) == from.size() - substring.size()) {
+        result = from.substr(0, from.size() - substring.size());
+      }
+    } else {
+      size_t index;
+      while ((index = result.find(substring)) != std::string::npos) {
+        result = result.erase(index, substring.size());
+      }
     }
-  } else if (mode == SUFFIX) {
-    if (from.rfind(substring) == from.size() - substring.size()) {
-      result = from.substr(0, from.size() - substring.size());
-    }
-  } else {
-    size_t index;
-    while ((index = result.find(substring)) != std::string::npos) {
-      result = result.erase(index, substring.size());
-    }
+
+    return result;
   }
-
-  return result;
 }
 
 
-inline std::string trim(
-    const std::string& from,
-    Mode mode = ANY,
-    const std::string& chars = WHITESPACE)
+template <typename T1, typename T2>
+inline auto trim(
+    const T1& from,
+    Mode mode,
+    const T2& chars)
 {
-  size_t start = 0;
-  Option<size_t> end = None();
+  {
+    auto FIX_CSTR(from), FIX_CSTR(chars);
+    typedef decltype(from) STRING;
+    size_t start = 0;
+    Option<size_t> end = None();
 
-  if (mode == ANY) {
-    start = from.find_first_not_of(chars);
-    end = from.find_last_not_of(chars);
-  } else if (mode == PREFIX) {
-    start = from.find_first_not_of(chars);
-  } else if (mode == SUFFIX) {
-    end = from.find_last_not_of(chars);
+    if (mode == ANY) {
+      start = from.find_first_not_of(chars);
+      end = from.find_last_not_of(chars);
+    } else if (mode == PREFIX) {
+      start = from.find_first_not_of(chars);
+    } else if (mode == SUFFIX) {
+      end = from.find_last_not_of(chars);
+    }
+
+    // Bail early if 'from' contains only characters in 'chars'.
+    if (start == STRING::npos) {
+      return STRING();
+    }
+
+    // Calculate the length of the substring, defaulting to the "end" of
+    // string if there were no characters to remove from the suffix.
+    size_t length = STRING::npos;
+
+    // Found characters to trim at the end.
+    if (end.isSome() && end.get() != STRING::npos) {
+      length = end.get() + 1 - start;
+    }
+
+    return from.substr(start, length);
   }
-
-  // Bail early if 'from' contains only characters in 'chars'.
-  if (start == std::string::npos) {
-    return "";
-  }
-
-  // Calculate the length of the substring, defaulting to the "end" of
-  // string if there were no characters to remove from the suffix.
-  size_t length = std::string::npos;
-
-  // Found characters to trim at the end.
-  if (end.isSome() && end.get() != std::string::npos) {
-    length = end.get() + 1 - start;
-  }
-
-  return from.substr(start, length);
 }
 
+template <typename T>
+inline auto trim(const T& from, Mode mode = ANY) {
+  {
+    auto FIX_CSTR(from);
+    typedef decltype(from) STRING;
+    STRING chars(fix_literal<STRING::value_type>(WHITESPACE));
+    return trim<STRING, STRING>(from, mode, chars);
+  }
+}
 
 // Helper providing some syntactic sugar for when 'mode' is ANY but
 // the 'chars' are specified.
@@ -379,6 +414,12 @@ inline bool checkBracketsMatching(
 
 
 inline bool startsWith(const std::string& s, const std::string& prefix)
+{
+  return s.size() >= prefix.size() &&
+         std::equal(prefix.begin(), prefix.end(), s.begin());
+}
+
+inline bool startsWith(const std::wstring& s, const std::wstring& prefix)
 {
   return s.size() >= prefix.size() &&
          std::equal(prefix.begin(), prefix.end(), s.begin());
