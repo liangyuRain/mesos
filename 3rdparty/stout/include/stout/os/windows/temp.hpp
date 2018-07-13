@@ -40,7 +40,7 @@ inline std::string temp()
     }
   }
 
-  return stringify(std::wstring(buffer.data()));
+  return narrow_stringify(std::wstring(buffer.data()));
 }
 
 } // namespace os {

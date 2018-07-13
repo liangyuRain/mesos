@@ -42,7 +42,7 @@ The general pattern is to just include the reason for an error, and to not
 include any information the caller already has, because otherwise the callers
 will double log:
 
-```
+```c++
 namespace os {
 
 Try<Nothing> copyfile(string source, string destination)
@@ -84,7 +84,7 @@ chosen.
 
 The POSIX-style code:
 
-```
+```c++
 int main()
 {
   int fd = open("/file");
@@ -98,7 +98,7 @@ int main()
 
 is similar to the following Mesos-style code:
 
-```
+```c++
 int main()
 {
   Try<int> fd = open("/file");
@@ -113,7 +113,7 @@ int main()
 If we use the alternative approach to have the leaf include all the information
 it has, then we have to compose differently:
 
-```
+```c++
 int main()
 {
   Try<int> fd = os::open("/file");
@@ -130,6 +130,174 @@ The approach we chose was to treat the error as just the "reason" (much like
 approaches work, but we have to pick one and apply it consistently as best we
 can. So don't add information to an error message that the caller already has.
 
+# Handling Strings
+
+Especially for paths in Windows, many functions need to support both
+narrow string and wide string (`std::string` and `std::wstring`). We have
+helper functions using template programming to handle these, so developer
+do not need to write repeated code for both type of strings. Here are some
+guides to use the helper functions.
+
+## `decide_string`
+
+`decide_string` is used to decide the type of string to use with a given type.
+For any given type `T`, `decide_string<T>::type` will be either `std::string`
+or `std::wstring` based on following rules.
+
+1. If `T` is convertible to `std::string` or is `char`,
+`decide_string<T>::type` will be `std::string`.
+
+2. If `T` cannot fall into the first category but is convertible to
+`std::wstring` or is `wchar_t`, `decide_string<T>::type` will be
+`std::wstring`.
+
+3. If `T` cannot fall into the first two categories `decide_string<T>::type`
+will be `std::string`.
+
+## `stringify`
+
+The latest version of `stringify` will stringify the object to the type of
+string decided by `decide_string` unless explicitly overloaded. Here are some
+examples of it:
+
+* `stringify(std::string/std::wstring) -> std::string/std::wstring`
+* `stringify(char*/wchar_t*) -> std::string/std::wstring`
+* `stringify(char/wchar_t) -> std::string/std::wstring`
+* `stringify(Path/WPath) -> std::string/std::wstring` for `Path` and `WPath` in
+`stout` library. They implement implicit conversion to `std::string` and
+`std::wstring` respectively.
+
+For performance consideration, `stringify` will not create new string if the
+type passed in is already `std::string` or `std::wstring`. In such case,
+`stringify` returns a const reference to the paremeter instead. Here is some
+examples:
+
+```c++
+char cstr[] = "abcdef";
+std::string str = "abcdef";
+
+const std::string& a = stringify(str);   // a is a reference to str
+std::string b = stringify(str);          // b is a copy of str
+const std::string& c = stringify(cstr);  // c is a copy of cstr
+std::string d = stringify(cstr);         // d is a copy of cstr
+
+std::string& e = stringify(str);         // Illegal, e must be const reference
+```
+
+`wchar_t` and `std::wstring` work in the same way as `char` and `std::string` do.
+
+## `string_convert`
+
+`string_convert` is similar to `stringify`. It accepts any argument `stringify`
+accepts but you must explicitly specify which type of string you want as a
+template argument. For example, to get a wide string out of `str`, we can do
+`string_convert<wchar_t>(str)`. Note that the template argument is `wchar_t` but
+not `std::wstring`, and `str` is not necessary to be narrow string.
+
+`string_convert` is also implemented to avoid copy as possible. If the passed in
+type is already in the wanted string type, it also returns const reference as
+what `stringify` does.
+
+`narrow_stringify` is equivalent to `string_convert<char>`, and `wide_stringify` is
+equivalent to `string_convert<wchar_t>`.
+
+## Guide for Writing String Functions
+
+If you want your function to support different type of strings, here is a guide
+for this. Example codes can be found in
+[`strings.hpp`](https://github.com/apache/mesos/blob/master/3rdparty/stout/include/stout/strings.hpp).
+
+### Function Behavior
+
+The type of the return value and the types of the parameters must be the same
+type of string if applied with `decide_string`. For example, let the function
+you want to write be `func(s1, s2)`, then
+`decide_string<decltype(func(s1, s2))>::type`,
+`decide_string<decltype(s1)>::type`, and `decide_string<decltype(s2)>::type`
+should all be the same type. Here are more examples:
+
+```c++
+char n_cstr[] = "abcdef";
+wchar_t w_cstr[] = L"abcdef";
+
+std::string n_str = "abcdef";
+std::wstring w_str = L"abcdef";
+
+std::string a = func(n_cstr, n_str);  // Legal
+std::wstring b = func(w_str, w_cstr); // Legal
+
+func(n_str, w_str);                   // Illegal, parameters have different
+                                      // `stringify` types
+std::wstring c = func(n_cstr, n_str); // Illegal, return value has different
+                                      // `stringify` type from parameters
+```
+
+### Declaration
+
+For function `func(s1, s2)` the recommended declaration is:
+
+```c++
+template <typename T1, typename T2>
+typename decide_string<T1>::type func(T1&& s1, T2&& s2);
+```
+
+Note that each parameter has a unique template argument to specify the type,
+because parameters may be different types like `s1` being a `std::string` while
+`s2` being a `char*`. In addition, the return type is decided by the type of
+parameter. It does not matter which parameter decides the type of return value,
+since it should be guaranteed that all parameters should decide to same type
+of string.
+
+### Function body
+
+A function definition for `func(s1, s2)` should be:
+
+```c++
+template <typename T1, typename T2>
+typename decide_string<T1>::type func(T1&& s1, T2&& s2) {
+  typedef typename decide_string<T1>::type STRING;
+  const STRING& s1_str(stringify(std::forward<T1>(s1)));
+  const STRING& s2_str(stringify(std::forward<T2>(s2)));
+
+  // From here, use s1_str and s2_str instead. Using s1 and s2
+  // again causes undefined behavior.
+  ......
+}
+```
+
+`STRING` is guaranteed to be either `std::string` or `std::wstring`. By using
+this beginning, we guarantee `s1_str` and `s2_str` to be the type of string we
+want, no matter what types are `s1` and `s2`.
+
+**It is crucial not to use parameter again in the function body, because `s1`
+and `s2` may be `rvalue` that `stringify` will use move constructor to
+construct string. Using them again causes undefined behavior.**
+
+In some versions of C++ compiler, another kind of beginning is strongly
+recommended:
+
+```c++
+template <typename T1, typename T2>
+typename decide_string<T1>::type func(T1&& s1, T2&& s2) {
+  typedef typename decide_string<T1>::type STRING;
+  {
+    const STRING& s1(stringify(std::forward<T1>(s1)));
+    const STRING& s2(stringify(std::forward<T2>(s2)));
+
+    ......
+  }
+}
+```
+
+In such beginning, the name `s1` and `s2` got overwritten in the inner
+namespace. Such coding guarantees absolutely safe use. However, currently, this
+only works on Windows but not linux because of different compiler versions.
+
+**It is strongly advised not to overload such functions with same number of
+parameters, because templated parameter type `T&&` can be basically deducted to
+any reference type. For more information on this, see item 26 from**
+*Effective Modern C++* (Scott Meyers, 2015).
+
 # Windows
 
 ## Unicode
@@ -140,7 +308,8 @@ Nonetheless, developers should be explicit when using an API: use
 `::SetCurrentDirectoryW` over the ambiguous macro `::SetCurrentyDirectory`.
 
 When converting from `std::string` to `std::wstring`, do not reinvent the wheel!
-Use the `wide_stringify()` and `stringify()` functions from
+Use the `wide_stringify()` and `narrow_stringify()` or `string_convert<T>()` functions
+from
 [`stringify.hpp`](https://github.com/apache/mesos/blob/master/3rdparty/stout/include/stout/stringify.hpp).
 
 ## Long Path Support

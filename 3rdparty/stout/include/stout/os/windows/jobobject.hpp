@@ -63,7 +63,7 @@ inline Try<SharedHandle> open_job(
   if (job_handle.get_handle() == nullptr) {
     return WindowsError(
         "os::open_job: Call to `OpenJobObject` failed for job: " +
-        stringify(name));
+        narrow_stringify(name));
   }
 
   return job_handle;
@@ -94,7 +94,7 @@ inline Try<SharedHandle> create_job(const std::wstring& name)
   if (job_handle.get_handle() == nullptr) {
     return WindowsError(
         "os::create_job: Call to `CreateJobObject` failed for job: " +
-        stringify(name));
+        narrow_stringify(name));
   }
 
   return job_handle;
