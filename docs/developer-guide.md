@@ -140,7 +140,8 @@ Nonetheless, developers should be explicit when using an API: use
 `::SetCurrentDirectoryW` over the ambiguous macro `::SetCurrentyDirectory`.
 
 When converting from `std::string` to `std::wstring`, do not reinvent the wheel!
-Use the `wide_stringify()` and `stringify()` functions from
+Use the `wide_stringify()` and `short_stringify()` or `utf_convert<T>()` functions
+from
 [`stringify.hpp`](https://github.com/apache/mesos/blob/master/3rdparty/stout/include/stout/stringify.hpp).
 
 ## Long Path Support

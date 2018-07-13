@@ -33,29 +33,125 @@
 #include "hashmap.hpp"
 #include "set.hpp"
 
+#define GET_TYPE(X) typename decide<decltype(X)>::type
+
+// Any type that is convertible to `std::string` including `char` will be
+// `decide` to be `std::string` after stringify. Any type that cannot fall into
+// the first category but is convertible to `std::wstring` including `wchar_t`
+// will be `decide` to be `std::wstring`. Any type cannot fall into these two
+// catefories will be `decide` to be `std::string`.
 template <typename T>
-std::string stringify(const T& t)
-{
-  std::ostringstream out;
-  out << t;
-  if (!out.good()) {
-    ABORT("Failed to stringify!");
+struct decide {
+  typedef typename
+      std::remove_cv<typename std::remove_reference<T>::type>::type original;
+  typedef typename std::conditional<
+      std::is_convertible<T, std::string>::value ||
+          std::is_same<original, char>::value,
+      std::string,
+      typename std::conditional<
+          std::is_convertible<T, std::wstring>::value ||
+              std::is_same<original, wchar_t>::value,
+          std::wstring,
+          std::string>::type>::type type;
+};
+
+
+template <bool DoCast, typename T1>
+struct convert_type {
+  template <typename T2>
+  std::basic_string<T1> operator()(T2&& obj);
+};
+
+
+template <typename T1>
+struct convert_type<true, T1> {
+  template <typename T2>
+  std::basic_string<T1> operator()(T2&& obj) {
+    return std::forward<T2>(obj);
   }
-  return out.str();
+};
+
+
+template <typename T1>
+struct convert_type<false, T1> {
+  template <typename T2>
+  std::basic_string<T1> operator()(T2&& obj) {
+    std::basic_ostringstream<T1> stream;
+    stream << std::forward<T2>(obj);
+    if (!stream.good()) {
+      ABORT("Failed to stringify!");
+    }
+    return stream.str();
+  }
+};
+
+
+// `stringify` will always preserve the UTF encoding. For example,
+// `std::string`, `const char*`, and `char` are all convert to `std::string`,
+// and `std::wstring`, `const wchar_t*`, and `wchar_t` are all convert to
+// `std::wstring`.
+//
+// For performance consideration, if the type passed in is already in
+// `std::basic_string` type, `stringify` will not create any new copy of it.
+template <typename T>
+static inline auto stringify(const T& obj) -> typename decide<T>::type {
+  typedef typename decide<T>::type STRING;
+  typedef typename STRING::value_type CHAR;
+  return convert_type<std::is_convertible<T, STRING>::value, CHAR>()(obj);
 }
 
 
-// We provide an explicit overload for strings so we do not incur the overhead
-// of a stringstream in generic code (e.g., when stringifying containers of
-// strings below).
-inline std::string stringify(const std::string& str)
-{
+template <typename T>
+static inline const std::basic_string<T>& stringify(
+    const std::basic_string<T>& str) {
   return str;
 }
 
 
+template <typename T>
+static inline std::basic_string<T> stringify(
+    std::basic_string<T>&& str) {
+  return std::move(str);
+}
+
+
+template <bool same, typename T1, typename T2>
+struct utf_convert_internal {
+  std::basic_string<T1> operator()(const std::basic_string<T2>& str);
+  std::basic_string<T1> operator()(std::basic_string<T2>&& str);
+};
+
+
+template <typename T>
+struct utf_convert_internal<true, T, T> {
+  std::basic_string<T> operator()(const std::basic_string<T>& str) {
+    return str;
+  }
+
+  std::basic_string<T> operator()(std::basic_string<T>&& str) {
+    return std::move(str);
+  }
+};
+
+
+template <typename T1, typename T2>
+struct utf_convert_internal<false, T1, T2> {
+  std::basic_string<T1> func(const std::basic_string<T2>& str) {
+    return std::basic_string<T1>(str.cbegin(), str.cend());
+  }
+
+  std::basic_string<T1> operator()(const std::basic_string<T2>& str) {
+    return func(str);
+  }
+
+  std::basic_string<T1> operator()(std::basic_string<T2>&& str) {
+    return func(str);
+  }
+};
+
+
 #ifdef __WINDOWS__
-inline std::string stringify(const std::wstring& str)
+inline std::string short_stringify(const std::wstring& str)
 {
   // Convert UTF-16 `wstring` to UTF-8 `string`.
   static std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>
@@ -64,6 +160,18 @@ inline std::string stringify(const std::wstring& str)
         L"UTF-16 to UTF-8 conversion failed");
 
   return converter.to_bytes(str);
+}
+
+
+inline const std::string& short_stringify(const std::string& str)
+{
+  return str;
+}
+
+
+inline std::string short_stringify(std::string&& str)
+{
+  return std::move(str);
 }
 
 
@@ -77,10 +185,64 @@ inline std::wstring wide_stringify(const std::string& str)
 
   return converter.from_bytes(str);
 }
+
+
+inline const std::wstring& wide_stringify(const std::wstring& str)
+{
+  return str;
+}
+
+
+inline std::wstring wide_stringify(std::wstring&& str)
+{
+  return std::move(str);
+}
+
+
+template <>
+struct utf_convert_internal<false, wchar_t, char> {
+  std::basic_string<wchar_t> operator()(const std::basic_string<char>& str) {
+    return wide_stringify(str);
+  }
+
+  std::basic_string<wchar_t> operator()(std::basic_string<char>&& str) {
+    return wide_stringify(std::move(str));
+  }
+};
+
+
+template <>
+struct utf_convert_internal<false, char, wchar_t> {
+  std::basic_string<char> operator()(const std::basic_string<wchar_t>& str) {
+    return short_stringify(str);
+  }
+
+  std::basic_string<char> operator()(std::basic_string<wchar_t>&& str) {
+    return short_stringify(std::move(str));
+  }
+};
 #endif // __WINDOWS__
 
 
-inline std::string stringify(bool b)
+// `utf_convert` can accept any argument `stringify` accept, and it can also
+// change the UTF encoding by providing a single template parameter. For
+// example, to convert a C `char*` string to wide string: 
+//
+//   std::wstring wstr = utf_convert<wchar_t>(cstr);
+//
+// Unlike `stringify`, `utf_convert` always create a new copy, even if the
+// string passed in is already in the desired UTF encoding.
+template <typename T1, typename T2>
+inline std::basic_string<T1> utf_convert(T2&& str) {
+  typedef GET_TYPE(str) STRING;
+  typedef typename STRING::value_type CHAR;
+  return utf_convert_internal<std::is_same<T1, CHAR>::value,
+                              T1,
+                              CHAR>()(stringify(std::forward<T2>(str)));
+}
+
+
+inline std::string stringify(const bool& b)
 {
   return b ? "true" : "false";
 }
