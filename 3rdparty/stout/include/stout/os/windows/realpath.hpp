@@ -55,7 +55,7 @@ inline Result<std::string> realpath(const std::string& path)
   }
 
   return strings::remove(
-      stringify(std::wstring(buffer.data())),
+      narrow_stringify(std::wstring(buffer.data())),
       os::LONGPATH_PREFIX,
       strings::Mode::PREFIX);
 }

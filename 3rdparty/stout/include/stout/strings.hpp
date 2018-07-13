@@ -37,26 +37,34 @@ enum Mode
   ANY
 };
 
+// `strings` functions support both `std::string` and `std::wstring`, as long
+// as all the parameters and return value are in the same UTF encoding.
 
-inline std::string remove(
-    const std::string& from,
-    const std::string& substring,
+template <typename T1, typename T2>
+inline GET_TYPE(T1) remove(
+    T1&& from,
+    T2&& substring,
     Mode mode = ANY)
 {
-  std::string result = from;
+  typedef GET_TYPE(T1) STRING;
+  const STRING& from_str(stringify(std::forward<T1>(from))),
+      substring_str(stringify(std::forward<T2>(substring)));
+
+  STRING result = from_str;
 
   if (mode == PREFIX) {
-    if (from.find(substring) == 0) {
-      result = from.substr(substring.size());
+    if (from_str.find(substring_str) == 0) {
+      result = from_str.substr(substring_str.size());
     }
   } else if (mode == SUFFIX) {
-    if (from.rfind(substring) == from.size() - substring.size()) {
-      result = from.substr(0, from.size() - substring.size());
+    if (from_str.rfind(substring_str) ==
+        from_str.size() - substring_str.size()) {
+      result = from_str.substr(0, from_str.size() - substring_str.size());
     }
   } else {
     size_t index;
-    while ((index = result.find(substring)) != std::string::npos) {
-      result = result.erase(index, substring.size());
+    while ((index = result.find(substring_str)) != std::string::npos) {
+      result = result.erase(index, substring_str.size());
     }
   }
 
@@ -64,68 +72,94 @@ inline std::string remove(
 }
 
 
-inline std::string trim(
-    const std::string& from,
-    Mode mode = ANY,
-    const std::string& chars = WHITESPACE)
+template <typename T1, typename T2>
+inline GET_TYPE(T1) trim(
+    T1&& from,
+    Mode mode,
+    T2&& chars)
 {
+  typedef GET_TYPE(T1) STRING;
+  const STRING& from_str(stringify(std::forward<T1>(from))),
+      chars_str(stringify(std::forward<T2>(chars)));
+
   size_t start = 0;
   Option<size_t> end = None();
 
   if (mode == ANY) {
-    start = from.find_first_not_of(chars);
-    end = from.find_last_not_of(chars);
+    start = from_str.find_first_not_of(chars_str);
+    end = from_str.find_last_not_of(chars_str);
   } else if (mode == PREFIX) {
-    start = from.find_first_not_of(chars);
+    start = from_str.find_first_not_of(chars_str);
   } else if (mode == SUFFIX) {
-    end = from.find_last_not_of(chars);
+    end = from_str.find_last_not_of(chars_str);
   }
 
   // Bail early if 'from' contains only characters in 'chars'.
-  if (start == std::string::npos) {
-    return "";
+  if (start == STRING::npos) {
+    return STRING();
   }
 
   // Calculate the length of the substring, defaulting to the "end" of
   // string if there were no characters to remove from the suffix.
-  size_t length = std::string::npos;
+  size_t length = STRING::npos;
 
   // Found characters to trim at the end.
-  if (end.isSome() && end.get() != std::string::npos) {
+  if (end.isSome() && end.get() != STRING::npos) {
     length = end.get() + 1 - start;
   }
 
-  return from.substr(start, length);
+  return from_str.substr(start, length);
+}
+
+
+template <typename T>
+inline GET_TYPE(T) trim(T&& from, Mode mode = ANY)
+{
+  typedef GET_TYPE(T) STRING;
+  return trim(std::forward<T>(from), mode,
+      utf_convert<typename STRING::value_type>(WHITESPACE));
 }
 
 
 // Helper providing some syntactic sugar for when 'mode' is ANY but
 // the 'chars' are specified.
-inline std::string trim(
-    const std::string& from,
-    const std::string& chars)
+template <typename T1, typename T2>
+inline GET_TYPE(T1) trim(T1&& from, T2&& chars)
 {
-  return trim(from, ANY, chars);
+  return trim(std::forward<T1>(from), ANY, std::forward<T2>(chars));
 }
 
 
 // Replaces all the occurrences of the 'from' string with the 'to' string.
-inline std::string replace(
-    const std::string& s,
-    const std::string& from,
-    const std::string& to)
+template <typename T1, typename T2, typename T3>
+inline GET_TYPE(T1) replace(T1&& s, T2&& from, T3&& to)
 {
-  std::string result = s;
-  size_t index = 0;
+  typedef GET_TYPE(T1) STRING;
+  const STRING& s_str(stringify(std::forward<T1>(s))),
+      from_str(stringify(std::forward<T2>(from))),
+      to_str(stringify(std::forward<T3>(to)));
 
-  if (from.empty()) {
-    return result;
+  if (from_str.empty()) {
+    return s_str;
   }
 
-  while ((index = result.find(from, index)) != std::string::npos) {
-    result.replace(index, from.length(), to);
-    index += to.length();
-  }
+  STRING result;
+  size_t begin = 0, end = 0;
+
+  do {
+    end = s_str.find(from_str, begin);
+    if (end == STRING::npos) {
+      end = s_str.size();
+    }
+    while(begin < end) {
+      result += s_str[begin++];
+    }
+    if (end != s_str.size()) {
+      result += to_str;
+    }
+    begin = end + from_str.size();
+  } while(begin < s_str.size());
+
   return result;
 }
 
@@ -136,36 +170,41 @@ inline std::string replace(
 // Optionally, the maximum number of tokens to be returned can be
 // specified. If the maximum number of tokens is reached, the last
 // token returned contains the remainder of the input string.
-inline std::vector<std::string> tokenize(
-    const std::string& s,
-    const std::string& delims,
+template <typename T1, typename T2>
+inline std::vector<GET_TYPE(T1)> tokenize(
+    T1&& s,
+    T2&& delims,
     const Option<size_t>& maxTokens = None())
 {
+  typedef GET_TYPE(T1) STRING;
+  const STRING& s_str(stringify(std::forward<T1>(s))),
+      delims_str(stringify(std::forward<T2>(delims)));
+
   if (maxTokens.isSome() && maxTokens.get() == 0) {
     return {};
   }
 
-  std::vector<std::string> tokens;
+  std::vector<STRING> tokens;
   size_t offset = 0;
 
   while (true) {
-    size_t nonDelim = s.find_first_not_of(delims, offset);
+    size_t nonDelim = s_str.find_first_not_of(delims_str, offset);
 
-    if (nonDelim == std::string::npos) {
+    if (nonDelim == STRING::npos) {
       break; // Nothing left.
     }
 
-    size_t delim = s.find_first_of(delims, nonDelim);
+    size_t delim = s_str.find_first_of(delims_str, nonDelim);
 
     // Finish tokenizing if this is the last token,
     // or we've found enough tokens.
-    if (delim == std::string::npos ||
+    if (delim == STRING::npos ||
         (maxTokens.isSome() && tokens.size() == maxTokens.get() - 1)) {
-      tokens.push_back(s.substr(nonDelim));
+      tokens.push_back(s_str.substr(nonDelim));
       break;
     }
 
-    tokens.push_back(s.substr(nonDelim, delim - nonDelim));
+    tokens.push_back(s_str.substr(nonDelim, delim - nonDelim));
     offset = delim;
   }
 
@@ -181,30 +220,35 @@ inline std::vector<std::string> tokenize(
 // Optionally, the maximum number of tokens to be returned can be
 // specified. If the maximum number of tokens is reached, the last
 // token returned contains the remainder of the input string.
-inline std::vector<std::string> split(
-    const std::string& s,
-    const std::string& delims,
+template <typename T1, typename T2>
+inline std::vector<GET_TYPE(T1)> split(
+    T1&& s,
+    T2&& delims,
     const Option<size_t>& maxTokens = None())
 {
+  typedef GET_TYPE(T1) STRING;
+  const STRING& s_str(stringify(std::forward<T1>(s))),
+      delims_str(stringify(std::forward<T2>(delims)));
+
   if (maxTokens.isSome() && maxTokens.get() == 0) {
     return {};
   }
 
-  std::vector<std::string> tokens;
+  std::vector<STRING> tokens;
   size_t offset = 0;
 
   while (true) {
-    size_t next = s.find_first_of(delims, offset);
+    size_t next = s_str.find_first_of(delims_str, offset);
 
     // Finish splitting if this is the last token,
     // or we've found enough tokens.
-    if (next == std::string::npos ||
+    if (next == STRING::npos ||
         (maxTokens.isSome() && tokens.size() == maxTokens.get() - 1)) {
-      tokens.push_back(s.substr(offset));
+      tokens.push_back(s_str.substr(offset));
       break;
     }
 
-    tokens.push_back(s.substr(offset, next - offset));
+    tokens.push_back(s_str.substr(offset, next - offset));
     offset = next + 1;
   }
 
@@ -220,16 +264,22 @@ inline std::vector<std::string> split(
 // Would return a map with the following:
 //   bar: ["2"]
 //   foo: ["1", "3"]
-inline std::map<std::string, std::vector<std::string>> pairs(
-    const std::string& s,
-    const std::string& delims1,
-    const std::string& delims2)
+template <typename T1, typename T2, typename T3>
+inline std::map<GET_TYPE(T1), std::vector<GET_TYPE(T1)>> pairs(
+    T1&& s,
+    T2&& delims1,
+    T3&& delims2)
 {
-  std::map<std::string, std::vector<std::string>> result;
+  typedef GET_TYPE(T1) STRING;
+  const STRING& s_str(stringify(std::forward<T1>(s))),
+      delims1_str(stringify(std::forward<T2>(delims1))),
+      delims2_str(stringify(std::forward<T3>(delims2)));
 
-  const std::vector<std::string> tokens = tokenize(s, delims1);
-  foreach (const std::string& token, tokens) {
-    const std::vector<std::string> pairs = tokenize(token, delims2);
+  std::map<STRING, std::vector<STRING>> result;
+
+  const std::vector<STRING> tokens = tokenize(s_str, delims1_str);
+  foreach (const STRING& token, tokens) {
+    const std::vector<STRING> pairs = tokenize(token, delims2_str);
     if (pairs.size() == 2) {
       result[pairs[0]].push_back(pairs[1]);
     }
@@ -241,61 +291,35 @@ inline std::map<std::string, std::vector<std::string>> pairs(
 
 namespace internal {
 
-inline std::stringstream& append(
-    std::stringstream& stream,
-    const std::string& value)
+template <typename T1, typename T2>
+inline std::basic_stringstream<T1>& append(
+    std::basic_stringstream<T1>& stream,
+    T2&& value)
 {
-  stream << value;
+  stream << ::stringify(std::forward<T2>(value));
   return stream;
 }
 
 
-inline std::stringstream& append(
-    std::stringstream& stream,
-    std::string&& value)
+template <typename T1, typename T2, typename T3>
+std::basic_stringstream<T1>& join(
+    std::basic_stringstream<T1>& stream,
+    T3&& separator,
+    T2&& tail)
 {
-  stream << value;
-  return stream;
+  return append(stream, std::forward<T2>(tail));
 }
 
 
-inline std::stringstream& append(
-    std::stringstream& stream,
-    const char*&& value)
-{
-  stream << value;
-  return stream;
-}
-
-
-template <typename T>
-std::stringstream& append(
-    std::stringstream& stream,
-    T&& value)
-{
-  stream << ::stringify(std::forward<T>(value));
-  return stream;
-}
-
-
-template <typename T>
-std::stringstream& join(
-    std::stringstream& stream,
-    const std::string& separator,
-    T&& tail)
-{
-  return append(stream, std::forward<T>(tail));
-}
-
-
-template <typename THead, typename... TTail>
-std::stringstream& join(
-    std::stringstream& stream,
-    const std::string& separator,
+template <typename T1, typename T2, typename THead, typename... TTail>
+std::basic_stringstream<T1>& join(
+    std::basic_stringstream<T1>& stream,
+    T2&& separator,
     THead&& head,
     TTail&&... tail)
 {
-  append(stream, std::forward<THead>(head)) << separator;
+  append<T1, THead>(stream, std::forward<THead>(head))
+      << std::forward<T2>(separator);
   internal::join(stream, separator, std::forward<TTail>(tail)...);
   return stream;
 }
@@ -303,13 +327,14 @@ std::stringstream& join(
 } // namespace internal {
 
 
-template <typename... T>
-std::stringstream& join(
-    std::stringstream& stream,
-    const std::string& separator,
+template <typename T1, typename T2, typename... T>
+std::basic_stringstream<T1>& join(
+    std::basic_stringstream<T1>& stream,
+    T2&& separator,
     T&&... args)
 {
-  internal::join(stream, separator, std::forward<T>(args)...);
+  internal::join(stream, std::forward<T2>(separator),
+      std::forward<T>(args)...);
   return stream;
 }
 
@@ -318,14 +343,18 @@ std::stringstream& join(
 // templatized Iterable join below. This means this implementation of
 // strings::join() is only activated if there are 2 or more things to
 // join.
-template <typename THead1, typename THead2, typename... TTail>
-std::string join(
-    const std::string& separator,
+template <typename T,
+          typename THead1,
+          typename THead2,
+          typename... TTail>
+GET_TYPE(T) join(
+    const T& separator,
     THead1&& head1,
     THead2&& head2,
     TTail&&... tail)
 {
-  std::stringstream stream;
+  typedef GET_TYPE(T) STRING;
+  std::basic_stringstream<typename STRING::value_type> stream;
   internal::join(
       stream,
       separator,
@@ -337,37 +366,55 @@ std::string join(
 
 
 // Ensure std::string doesn't fall into the iterable case
-inline std::string join(const std::string& seperator, const std::string& s) {
+template <typename T1, typename T2>
+inline std::basic_string<T2> join(
+    T1&& separator,
+    const std::basic_string<T2>& s) {
   return s;
 }
 
 
+template <typename T1, typename T2>
+inline std::basic_string<T2> join(
+    T1&& separator,
+    const T2*& s) {
+  return stringify(s);
+}
+
+
 // Use duck-typing to join any iterable.
-template <typename Iterable>
-inline std::string join(const std::string& separator, const Iterable& i)
+template <typename Iterable, typename T>
+inline GET_TYPE(T) join(
+    T&& separator,
+    const Iterable& i)
 {
-  std::string result;
+  typedef GET_TYPE(T) STRING;
+  const STRING& sep_str(stringify(std::forward<T>(separator)));
+  STRING result;
   typename Iterable::const_iterator iterator = i.begin();
   while (iterator != i.end()) {
     result += stringify(*iterator);
     if (++iterator != i.end()) {
-      result += separator;
+      result += sep_str;
     }
   }
   return result;
 }
 
 
+template <typename T>
 inline bool checkBracketsMatching(
-    const std::string& s,
-    const char openBracket,
-    const char closeBracket)
+    T&& s,
+    const GET_TYPE(T)::value_type openBracket,
+    const GET_TYPE(T)::value_type closeBracket)
 {
+  typedef GET_TYPE(T) STRING;
+  const STRING& s_str(stringify(std::forward<T>(s)));
   int count = 0;
-  for (size_t i = 0; i < s.length(); i++) {
-    if (s[i] == openBracket) {
+  for (size_t i = 0; i < s_str.length(); i++) {
+    if (s_str[i] == openBracket) {
       count++;
-    } else if (s[i] == closeBracket) {
+    } else if (s_str[i] == closeBracket) {
       count--;
     }
     if (count < 0) {
@@ -378,65 +425,53 @@ inline bool checkBracketsMatching(
 }
 
 
-inline bool startsWith(const std::string& s, const std::string& prefix)
+template <typename T1, typename T2>
+inline bool startsWith(T1&& s, T2&& prefix)
 {
-  return s.size() >= prefix.size() &&
-         std::equal(prefix.begin(), prefix.end(), s.begin());
+  typedef GET_TYPE(T1) STRING;
+  const STRING& s_str(stringify(std::forward<T1>(s))),
+      prefix_str(stringify(std::forward<T2>(prefix)));
+  return s_str.size() >= prefix_str.size() &&
+         std::equal(prefix_str.begin(), prefix_str.end(), s_str.begin());
 }
 
 
-inline bool startsWith(const std::string& s, const char* prefix)
+template <typename T1, typename T2>
+inline bool endsWith(T1&& s, T2&& suffix)
 {
-  size_t len = ::strnlen(prefix, s.size() + 1);
-  return s.size() >= len &&
-         std::equal(s.begin(), s.begin() + len, prefix);
+  typedef GET_TYPE(T1) STRING;
+  const STRING& s_str(stringify(std::forward<T1>(s))),
+      suffix_str(stringify(std::forward<T2>(suffix)));
+  return s_str.size() >= suffix_str.size() &&
+         std::equal(suffix_str.rbegin(), suffix_str.rend(), s_str.rbegin());
 }
 
 
-inline bool startsWith(const std::string& s, char c)
+template <typename T1, typename T2>
+inline bool contains(T1&& s, T2&& substr)
 {
-  return !s.empty() && s.front() == c;
+  typedef GET_TYPE(T1) STRING;
+  const STRING& s_str(stringify(std::forward<T1>(s))),
+      substr_str(stringify(std::forward<T2>(substr)));
+  return s_str.find(substr_str) != STRING::npos;
 }
 
 
-inline bool endsWith(const std::string& s, const std::string& suffix)
+template <typename T>
+inline GET_TYPE(T) lower(T&& s)
 {
-  return s.size() >= suffix.size() &&
-         std::equal(suffix.rbegin(), suffix.rend(), s.rbegin());
-}
-
-
-inline bool endsWidth(const std::string& s, const char* suffix)
-{
-  size_t len = ::strnlen(suffix, s.size() + 1);
-  return s.size() >= len &&
-         std::equal(s.end() - len, s.end(), suffix);
-}
-
-
-inline bool endsWith(const std::string& s, char c)
-{
-  return !s.empty() && s.back() == c;
-}
-
-
-inline bool contains(const std::string& s, const std::string& substr)
-{
-  return s.find(substr) != std::string::npos;
-}
-
-
-inline std::string lower(const std::string& s)
-{
-  std::string result = s;
+  typedef GET_TYPE(T) STRING;
+  STRING result = stringify(std::forward<T>(s));
   std::transform(result.begin(), result.end(), result.begin(), ::tolower);
   return result;
 }
 
 
-inline std::string upper(const std::string& s)
+template <typename T>
+inline GET_TYPE(T) upper(T&& s)
 {
-  std::string result = s;
+  typedef GET_TYPE(T) STRING;
+  STRING result = stringify(std::forward<T>(s));
   std::transform(result.begin(), result.end(), result.begin(), ::toupper);
   return result;
 }
