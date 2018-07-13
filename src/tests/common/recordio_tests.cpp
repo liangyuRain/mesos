@@ -69,7 +69,7 @@ TEST(RecordIOReaderTest, EndOfFile)
 {
   // Write some data to the pipe so that records
   // are available before any reads occur.
-  ::recordio::Encoder<string> encoder(strings::upper);
+  ::recordio::Encoder<string> encoder(strings::upper<string>);
 
   string data;
 
@@ -80,7 +80,7 @@ TEST(RecordIOReaderTest, EndOfFile)
   pipe.writer().write(data);
 
   mesos::internal::recordio::Reader<string> reader(
-      ::recordio::Decoder<string>(strings::lower),
+      ::recordio::Decoder<string>(strings::lower<string>),
       pipe.reader());
 
   AWAIT_EXPECT_EQ(Result<string>::some("hello"), reader.read());
@@ -106,11 +106,11 @@ TEST(RecordIOReaderTest, EndOfFile)
 
 TEST(RecordIOReaderTest, DecodingFailure)
 {
-  ::recordio::Encoder<string> encoder(strings::upper);
+  ::recordio::Encoder<string> encoder(strings::upper<string>);
   process::http::Pipe pipe;
 
   mesos::internal::recordio::Reader<string> reader(
-      ::recordio::Decoder<string>(strings::lower),
+      ::recordio::Decoder<string>(strings::lower<string>),
       pipe.reader());
 
   // Have multiple outstanding reads before we fail the decoder.
@@ -136,11 +136,11 @@ TEST(RecordIOReaderTest, DecodingFailure)
 
 TEST(RecordIOReaderTest, PipeFailure)
 {
-  ::recordio::Encoder<string> encoder(strings::upper);
+  ::recordio::Encoder<string> encoder(strings::upper<string>);
   process::http::Pipe pipe;
 
   mesos::internal::recordio::Reader<string> reader(
-      ::recordio::Decoder<string>(strings::lower),
+      ::recordio::Decoder<string>(strings::lower<string>),
       pipe.reader());
 
   // Have multiple outstanding reads before we fail the writer.
@@ -167,7 +167,7 @@ TEST(RecordIOTransformTest, EndOfFile)
 {
   // Write some data to the pipe so that records
   // are available before any reads occur.
-  ::recordio::Encoder<string> encoder(strings::upper);
+  ::recordio::Encoder<string> encoder(strings::upper<string>);
 
   string data;
 
@@ -179,7 +179,7 @@ TEST(RecordIOTransformTest, EndOfFile)
 
   process::Owned<mesos::internal::recordio::Reader<string>> reader(
     new mesos::internal::recordio::Reader<string>(
-        ::recordio::Decoder<string>(strings::lower),
+        ::recordio::Decoder<string>(strings::lower<string>),
         pipeA.reader()));
 
   process::http::Pipe pipeB;
@@ -207,7 +207,7 @@ TEST(RecordIOTransformTest, ReaderWriterEndFail)
 {
   // Write some data to the pipe so that records
   // are available before any reads occur.
-  ::recordio::Encoder<string> encoder(strings::upper);
+  ::recordio::Encoder<string> encoder(strings::upper<string>);
 
   string data;
 
@@ -219,7 +219,7 @@ TEST(RecordIOTransformTest, ReaderWriterEndFail)
 
   process::Owned<mesos::internal::recordio::Reader<string>> reader(
     new mesos::internal::recordio::Reader<string>(
-        ::recordio::Decoder<string>(strings::lower),
+        ::recordio::Decoder<string>(strings::lower<string>),
         pipeA.reader()));
 
   process::http::Pipe pipeB;
@@ -244,7 +244,7 @@ TEST(RecordIOTransformTest, WriterReadEndFail)
 {
   // Write some data to the pipe so that records
   // are available before any reads occur.
-  ::recordio::Encoder<string> encoder(strings::upper);
+  ::recordio::Encoder<string> encoder(strings::upper<string>);
 
   string data;
 
@@ -256,7 +256,7 @@ TEST(RecordIOTransformTest, WriterReadEndFail)
 
   process::Owned<mesos::internal::recordio::Reader<string>> reader(
     new mesos::internal::recordio::Reader<string>(
-        ::recordio::Decoder<string>(strings::lower),
+        ::recordio::Decoder<string>(strings::lower<string>),
         pipeA.reader()));
 
   process::http::Pipe pipeB;

@@ -62,7 +62,7 @@ inline Option<std::string> getenv(const std::string& key)
     return "";
   }
 
-  return stringify(std::wstring(environment.data()));
+  return short_stringify(std::wstring(environment.data()));
 }
 
 } // namespace os {

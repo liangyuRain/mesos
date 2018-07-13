@@ -33,29 +33,93 @@
 #include "hashmap.hpp"
 #include "set.hpp"
 
+#define GET_TYPE(X) typename decide<decltype(X)>::type
+
 template <typename T>
-std::string stringify(const T& t)
-{
-  std::ostringstream out;
-  out << t;
-  if (!out.good()) {
-    ABORT("Failed to stringify!");
+struct decide {
+  typedef typename std::conditional<
+      std::is_convertible<T, std::string>::value,
+      std::string,
+      typename std::conditional<
+          std::is_convertible<T, std::wstring>::value,
+          std::wstring,
+          std::string>::type>::type type;
+};
+
+
+template <bool DoCast, typename T1, typename T2>
+struct convert_type {
+  std::basic_string<T2> operator()(const T1& obj);
+};
+
+
+template <typename T1, typename T2>
+struct convert_type<true, T1, T2> {
+  std::basic_string<T2> operator()(const T1& obj) {
+    return (std::basic_string<T2>) obj;
   }
-  return out.str();
+};
+
+
+template <typename T1, typename T2>
+struct convert_type<false, T1, T2> {
+  std::basic_string<T2> operator()(const T1& obj) {
+    std::basic_ostringstream<T2> stream;
+    stream << obj;
+    if (!stream.good()) {
+      ABORT("Failed to stringify!");
+    }
+    return stream.str();
+  }
+};
+
+
+template <typename T>
+static inline auto stringify(const T& cstr) -> typename decide<T>::type {
+  typedef typename decide<T>::type STRING;
+  typedef typename STRING::value_type CHAR;
+  return convert_type<std::is_convertible<T, STRING>::value, T, CHAR>()(cstr);
 }
 
 
-// We provide an explicit overload for strings so we do not incur the overhead
-// of a stringstream in generic code (e.g., when stringifying containers of
-// strings below).
-inline std::string stringify(const std::string& str)
-{
+template <typename T>
+static inline const std::basic_string<T>& stringify(
+    const std::basic_string<T>& str) {
   return str;
 }
 
 
+template <typename T>
+static inline std::basic_string<T>&& stringify(
+    std::basic_string<T>&& str) {
+  return std::forward<std::basic_string<T>>(str);
+}
+
+
+template <bool same, typename T1, typename T2>
+struct utf_convert_internal {
+  std::basic_string<T1> operator()(const std::basic_string<T2>& str);
+};
+
+
+template <typename T>
+struct utf_convert_internal<true, T, T> {
+  std::basic_string<T> operator()(const std::basic_string<T>& str) {
+    return str;
+  }
+};
+
+
+template <typename T1, typename T2>
+struct utf_convert_internal<false, T1, T2> {
+  std::basic_string<T1> operator()(const std::basic_string<T2>& str) {
+    return std::basic_string<T1>(str.cbegin(), str.cend());
+  }
+};
+
+
 #ifdef __WINDOWS__
-inline std::string stringify(const std::wstring& str)
+inline std::string short_stringify(const std::wstring& str)
 {
   // Convert UTF-16 `wstring` to UTF-8 `string`.
   static std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>
@@ -64,6 +128,12 @@ inline std::string stringify(const std::wstring& str)
         L"UTF-16 to UTF-8 conversion failed");
 
   return converter.to_bytes(str);
+}
+
+
+inline std::string short_stringify(const std::string& str)
+{
+  return str;
 }
 
 
@@ -77,10 +147,44 @@ inline std::wstring wide_stringify(const std::string& str)
 
   return converter.from_bytes(str);
 }
+
+
+inline std::wstring wide_stringify(const std::wstring& str)
+{
+  return str;
+}
+
+
+template <>
+struct utf_convert_internal<false, wchar_t, char> {
+  std::basic_string<wchar_t> operator()(const std::basic_string<char>& str) {
+    return wide_stringify(str);
+  }
+};
+
+
+template <>
+struct utf_convert_internal<false, char, wchar_t> {
+  std::basic_string<char> operator()(const std::basic_string<wchar_t>& str) {
+    return short_stringify(str);
+  }
+};
 #endif // __WINDOWS__
 
 
-inline std::string stringify(bool b)
+template <typename T1, typename T2>
+inline std::basic_string<T1> utf_convert(const T2& str) {
+  typedef GET_TYPE(str) STRING;
+  typedef typename STRING::value_type CHAR;
+  const STRING& str_str(stringify(str));
+  return utf_convert_internal<std::is_same<T1, CHAR>::value,
+                              T1,
+                              CHAR>()(str_str);
+}
+
+
+template <>
+inline std::string stringify<bool>(const bool& b)
 {
   return b ? "true" : "false";
 }
@@ -196,7 +300,8 @@ std::string stringify(const hashmap<K, V>& map)
 // Consider the following overloads instead for better performance:
 //   const std::string& stringify(const Error&);
 //   std::string stringify(Error&&);
-inline std::string stringify(const Error& error)
+template <>
+inline std::string stringify<Error>(const Error& error)
 {
   return error.message;
 }

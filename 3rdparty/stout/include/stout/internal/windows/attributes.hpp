@@ -28,7 +28,7 @@ inline Try<DWORD> get_file_attributes(const std::wstring& path) {
   const DWORD attributes = ::GetFileAttributesW(path.data());
   if (attributes == INVALID_FILE_ATTRIBUTES) {
     return WindowsError(
-        "Failed to get attributes for file '" + stringify(path) + "'");
+        "Failed to get attributes for file '" + short_stringify(path) + "'");
   }
   return attributes;
 }
