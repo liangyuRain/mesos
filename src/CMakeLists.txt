@@ -44,6 +44,7 @@ PROTOC_GENERATE(TARGET mesos/authorizer/authorizer)
 PROTOC_GENERATE(TARGET mesos/docker/spec)
 PROTOC_GENERATE(TARGET mesos/docker/v1)
 PROTOC_GENERATE(TARGET mesos/docker/v2)
+PROTOC_GENERATE(TARGET mesos/docker/v2_2)
 PROTOC_GENERATE(TARGET mesos/maintenance/maintenance)
 PROTOC_GENERATE(TARGET mesos/master/master)
 PROTOC_GENERATE(TARGET mesos/module/hook)
@@ -183,11 +184,7 @@ set(AGENT_SRC
   slave/containerizer/mesos/provisioner/docker/store.cpp
   slave/resource_estimators/noop.cpp)
 
-if (WIN32)
-  list(APPEND AGENT_SRC
-    slave/containerizer/mesos/isolators/windows/cpu.cpp
-    slave/containerizer/mesos/isolators/windows/mem.cpp)
-else ()
+if (NOT WIN32)
   list(APPEND AGENT_SRC
     slave/containerizer/mesos/utils.cpp
     slave/containerizer/mesos/isolators/environment_secret.cpp
@@ -419,12 +416,8 @@ set(URI_SRC
   uri/utils.cpp
   uri/fetchers/copy.cpp
   uri/fetchers/curl.cpp
+  uri/fetchers/docker.cpp
   uri/fetchers/hadoop.cpp)
-
-if (NOT WIN32)
-  list(APPEND URI_SRC
-    uri/fetchers/docker.cpp)
-endif ()
 
 set(USAGE_SRC
   usage/usage.cpp)
@@ -442,6 +435,9 @@ set(WATCHER_SRC
   watcher/whitelist_watcher.cpp)
 
 set(WIN32_SRC
+  slave/containerizer/mesos/isolators/docker/runtime.cpp
+  slave/containerizer/mesos/isolators/windows/cpu.cpp
+  slave/containerizer/mesos/isolators/windows/mem.cpp
   slave/containerizer/mesos/isolators/environment_secret.cpp
   slave/containerizer/mesos/isolators/filesystem/posix.cpp
   slave/containerizer/mesos/isolators/filesystem/windows.cpp)

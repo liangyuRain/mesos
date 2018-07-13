@@ -341,5 +341,76 @@ Try<ImageManifest> parse(const string& s)
 }
 
 } // namespace v2 {
+
+namespace v2_2 {
+
+Option<Error> validate(const ImageManifest& manifest)
+{
+  if (manifest.schemaversion() != 2) {
+    return Error("'schemaVersion' field must be 2");
+  }
+  if (manifest.mediatype() !=
+    "application/vnd.docker.distribution.manifest.v2+json") {
+    return Error("'mediaType' field must be "
+        "'application/vnd.docker.distribution.manifest.v2+json'");
+  }
+  return None();
+}
+
+
+Try<ImageManifest> parse(const JSON::Object& json)
+{
+  Try<ImageManifest> manifest = protobuf::parse<ImageManifest>(json);
+  if (manifest.isError()) {
+    return Error("Protobuf parse failed: " + manifest.error());
+  }
+
+  Option<Error> error = validate(manifest.get());
+  if (error.isSome()) {
+    return Error(
+        "Docker v2 s2 image manifest validation failed: " + error->message);
+  }
+
+  return manifest.get();
+}
+
+
+Try<ImageManifest> parse(const string& s)
+{
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(s);
+  if (json.isError()) {
+    return Error("JSON parse failed: " + json.error());
+  }
+
+  return parse(json.get());
+}
+
+} // namespace v2_2 {
+
+Try<ImageManifest> parse(const JSON::Object& json) {
+  Try<v2_2::ImageManifest> v2s2 = v2_2::parse(json);
+  if (!v2s2.isError()) {
+    return ImageManifest(v2s2.get());
+  }
+  Try<v2::ImageManifest> v2s1 = v2::parse(json);
+  if (!v2s1.isError()) {
+    return ImageManifest(v2s1.get());
+  }
+  Try<v1::ImageManifest> v1 = v1::parse(json);
+  if (!v1.isError()) {
+    return ImageManifest(v1.get());
+  }
+  return Error("Unsuppoted image manifest version");
+}
+
+Try<ImageManifest> parse(const std::string& s) {
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(s);
+  if (json.isError()) {
+    return Error("JSON parse failed: " + json.error());
+  }
+
+  return parse(json.get());
+}
+
 } // namespace spec {
 } // namespace docker {

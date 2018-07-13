@@ -40,6 +40,7 @@ namespace spec = docker::spec;
 
 using std::string;
 using std::vector;
+using std::shared_ptr;
 
 using process::Failure;
 using process::Future;
@@ -463,6 +464,44 @@ Future<hashset<string>> RegistryPullerProcess::fetchBlobs(
     blobSums.insert(blobSum);
   }
 
+  hashmap<string, vector<string>> urls;
+  bool use_s2 = false;
+
+  Try<string> _manifest_s2 = os::read(path::join(directory, "manifest_v2s2"));
+  if (_manifest_s2.isError()) {
+    VLOG(1) << "Failed to read the schema 2 manifest: " << _manifest_s2.error();
+    goto fail;
+  } else {
+    Try<spec::v2_2::ImageManifest> manifest_s2 =
+        spec::v2_2::parse(_manifest_s2.get());
+    if (manifest_s2.isError()) {
+      VLOG(1) << "Failed to parse the schema 2 manifest: "
+              << manifest_s2.error();
+      goto fail;
+    }
+
+    VLOG(1) << "The schema 2 manifest for image '" << reference << "' is '"
+            << _manifest_s2.get() << "'";
+
+    use_s2 = true;
+
+    for (int i = 0; i < manifest_s2->layers_size(); i++) {
+      string blobSum = manifest_s2->layers(i).digest();
+      vector<string>& vec = urls[blobSum];
+      for (int j = 0; j < manifest_s2->layers(i).urls_size(); ++j) {
+        string url = manifest_s2->layers(i).urls(j);
+        vec.emplace_back(url);
+      }
+    }
+
+    goto succeed;
+  }
+
+fail:
+  VLOG(1) << "Cannot get schema 2 manifest for image '" << reference << "'. "
+          << "Fetch only with schema 1 manifest instead.";
+
+succeed:
   // Now, actually fetch the blobs.
   vector<Future<Nothing>> futures;
 
@@ -506,10 +545,19 @@ Future<hashset<string>> RegistryPullerProcess::fetchBlobs(
           port);
     }
 
+    auto vec = urls.find(blobSum);
+    if (use_s2 && vec != urls.end()) {
     futures.push_back(fetcher->fetch(
         blobUri,
+        vec->second,
         directory,
         config.isSome() ? config->data() : Option<string>()));
+    } else {
+      futures.push_back(fetcher->fetch(
+          blobUri,
+          directory,
+          config.isSome() ? config->data() : Option<string>()));
+    }
   }
 
   return collect(futures)
