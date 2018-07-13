@@ -50,7 +50,7 @@ inline std::wstring longpath(const std::string& path)
 
 inline std::wstring longpath(const std::wstring& path)
 {
-  return longpath(stringify(path));
+  return longpath(short_stringify(path));
 }
 
 } // namespace windows {
