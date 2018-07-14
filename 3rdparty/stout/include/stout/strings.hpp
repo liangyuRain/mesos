@@ -25,8 +25,12 @@
 #include "option.hpp"
 #include "stringify.hpp"
 
-#define GET_TYPE(X) typename \
-    std::remove_const<typename std::remove_reference<decltype(X)>::type>::type
+#define GET_ORIGINAL(X) \
+    typename std::remove_const< \
+    typename std::remove_reference< \
+    typename std::remove_pointer< \
+    typename std::remove_all_extents<X>::type>::type>::type>::type
+#define GET_TYPE(X) GET_ORIGINAL(decltype(X))
 
 namespace strings {
 
@@ -41,14 +45,21 @@ enum Mode
 };
 
 template <typename T>
-static inline std::basic_string<T> fix_cstr(const T* cstr) {
-  return std::basic_string<T>(cstr);
+static inline auto fix_cstr(const T& ch)
+    -> std::basic_string<GET_ORIGINAL(T)> {
+  return std::basic_string<GET_ORIGINAL(T)>(ch);
 }
 
 template <typename T>
 static inline const std::basic_string<T>& fix_cstr(
     const std::basic_string<T>& str) {
   return str;
+}
+
+template <typename T>
+static inline std::basic_string<T>&& fix_cstr(
+    const std::basic_string<T>&& str) {
+  return std::forward<std::basic_string<T>>(str);
 }
 
 template <typename T>
@@ -305,37 +316,39 @@ inline std::basic_stringstream<T1>& append(
     std::basic_stringstream<T1>& stream,
     const T2& value)
 {
-  stream << fix_cstr<T1>(value);
+  stream << value;
   return stream;
 }
 
 
-// inline std::stringstream& append(
-//     std::stringstream& stream,
-//     std::string&& value)
-// {
-//   stream << value;
-//   return stream;
-// }
+template <typename T1, typename T2>
+inline std::basic_stringstream<T1>& append(
+    std::basic_stringstream<T1>& stream,
+    const T2&& value)
+{
+  stream << value;
+  return stream;
+}
 
 
-// inline std::stringstream& append(
-//     std::stringstream& stream,
-//     const char*&& value)
-// {
-//   stream << value;
-//   return stream;
-// }
+template <typename T>
+inline std::basic_stringstream<T>& append(
+    std::basic_stringstream<T>& stream,
+    const T*&& value)
+{
+  stream << value;
+  return stream;
+}
 
 
-// template <typename T>
-// std::stringstream& append(
-//     std::stringstream& stream,
-//     T&& value)
-// {
-//   stream << ::stringify(std::forward<T>(value));
-//   return stream;
-// }
+template <typename T1, typename T2>
+std::basic_stringstream<T2>& append(
+    std::basic_stringstream<T2>& stream,
+    T1&& value)
+{
+  stream << ::stringify(std::forward<T1>(value));
+  return stream;
+}
 
 
 template <typename T>
