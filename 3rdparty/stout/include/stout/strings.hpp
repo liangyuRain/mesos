@@ -376,10 +376,10 @@ std::basic_stringstream<T1>& join(
 } // namespace internal {
 
 
-template <typename... T>
-std::stringstream& join(
-    std::stringstream& stream,
-    const std::string& separator,
+template <typename T1, typename T2, typename... T>
+std::basic_stringstream<T1>& join(
+    std::basic_stringstream<T1>& stream,
+    const T2& separator,
     T&&... args)
 {
   internal::join(stream, separator, std::forward<T>(args)...);
@@ -391,14 +391,15 @@ std::stringstream& join(
 // templatized Iterable join below. This means this implementation of
 // strings::join() is only activated if there are 2 or more things to
 // join.
-template <typename THead1, typename THead2, typename... TTail>
-std::string join(
-    const std::string& separator,
+template <typename T, typename THead1, typename THead2, typename... TTail>
+auto join(
+    const T& separator,
     THead1&& head1,
     THead2&& head2,
-    TTail&&... tail)
+    TTail&&... tail) -> GET_TYPE(separator)
 {
-  std::stringstream stream;
+  typedef GET_TYPE(separator) STRING;
+  std::basic_stringstream<typename STRING::value_type> stream;
   internal::join(
       stream,
       separator,
@@ -413,18 +414,36 @@ std::string join(
 inline std::string join(const std::string& seperator, const std::string& s) {
   return s;
 }
+template <typename T1, typename T2>
+inline std::basic_string<T2> join(
+    const T1& separator,
+    const std::basic_string<T2>& s) {
+  return s;
+}
+
+
+template <typename T1, typename T2>
+inline std::basic_string<T2> join(
+    const T1& separator,
+    const T2*& s) {
+  return fix_cstr(s);
+}
 
 
 // Use duck-typing to join any iterable.
-template <typename Iterable>
-inline std::string join(const std::string& separator, const Iterable& i)
+template <typename T, typename Iterable>
+inline auto join(
+    const T& separator,
+    const Iterable& i) -> GET_TYPE(separator)
 {
-  std::string result;
+  typedef GET_TYPE(separator) STRING;
+  const STRING& sep_str(fix_cstr(separator));
+  STRING result;
   typename Iterable::const_iterator iterator = i.begin();
   while (iterator != i.end()) {
     result += stringify(*iterator);
     if (++iterator != i.end()) {
-      result += separator;
+      result += sep_str;
     }
   }
   return result;
