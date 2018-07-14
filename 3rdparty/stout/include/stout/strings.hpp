@@ -30,7 +30,7 @@
     typename std::remove_reference< \
     typename std::remove_pointer< \
     typename std::remove_all_extents<X>::type>::type>::type>::type
-#define GET_TYPE(X) GET_ORIGINAL(decltype(X))
+#define GET_TYPE(X) GET_ORIGINAL(decltype(fix_cstr(X)))
 
 namespace strings {
 
@@ -71,9 +71,9 @@ template <typename T1, typename T2>
 inline auto remove(
     const T1& from,
     const T2& substring,
-    Mode mode = ANY) -> GET_TYPE(fix_cstr(from))
+    Mode mode = ANY) -> GET_TYPE(from)
 {
-  typedef GET_TYPE(fix_cstr(from)) STRING;
+  typedef GET_TYPE(from) STRING;
   const STRING& from_str(fix_cstr(from)), substring_str(fix_cstr(substring));
 
   STRING result = from_str;
@@ -102,9 +102,9 @@ template <typename T1, typename T2>
 inline auto trim(
     const T1& from,
     Mode mode,
-    const T2& chars) -> GET_TYPE(fix_cstr(from))
+    const T2& chars) -> GET_TYPE(from)
 {
-  typedef GET_TYPE(fix_cstr(from)) STRING;
+  typedef GET_TYPE(from) STRING;
   const STRING& from_str(fix_cstr(from)), chars_str(fix_cstr(chars));
 
   size_t start = 0;
@@ -137,9 +137,9 @@ inline auto trim(
 }
 
 template <typename T>
-inline auto trim(const T& from, Mode mode = ANY) -> GET_TYPE(fix_cstr(from))
+inline auto trim(const T& from, Mode mode = ANY) -> GET_TYPE(from)
 {
-  typedef GET_TYPE(fix_cstr(from)) STRING;
+  typedef GET_TYPE(from) STRING;
   const STRING& from_str(fix_cstr(from));
   STRING chars(fix_literal<typename STRING::value_type>(WHITESPACE));
   return trim<STRING, STRING>(from_str, mode, chars);
@@ -150,7 +150,7 @@ inline auto trim(const T& from, Mode mode = ANY) -> GET_TYPE(fix_cstr(from))
 template <typename T1, typename T2>
 inline auto trim(
     const T1& from,
-    const T2& chars) -> GET_TYPE(fix_cstr(from))
+    const T2& chars) -> GET_TYPE(from)
 {
   return trim(fix_cstr(from), ANY, fix_cstr(chars));
 }
@@ -161,9 +161,9 @@ template <typename T1, typename T2, typename T3>
 inline auto replace(
     const T1& s,
     const T2& from,
-    const T3& to) -> GET_TYPE(fix_cstr(s))
+    const T3& to) -> GET_TYPE(s)
 {
-  typedef GET_TYPE(fix_cstr(s)) STRING;
+  typedef GET_TYPE(s) STRING;
   const STRING& s_str(fix_cstr(s)),
       from_str(fix_cstr(from)),
       to_str(fix_cstr(to));
@@ -194,9 +194,9 @@ inline auto tokenize(
     const T1& s,
     const T2& delims,
     const Option<size_t>& maxTokens = None())
-    -> std::vector<GET_TYPE(fix_cstr(s))>
+    -> std::vector<GET_TYPE(s)>
 {
-  typedef GET_TYPE(fix_cstr(s)) STRING;
+  typedef GET_TYPE(s) STRING;
   const STRING& s_str(fix_cstr(s)), delims_str(fix_cstr(delims));
 
   if (maxTokens.isSome() && maxTokens.get() == 0) {
@@ -244,9 +244,9 @@ inline auto split(
     const T1& s,
     const T2& delims,
     const Option<size_t>& maxTokens = None())
-    -> std::vector<GET_TYPE(fix_cstr(s))>
+    -> std::vector<GET_TYPE(s)>
 {
-  typedef GET_TYPE(fix_cstr(s)) STRING;
+  typedef GET_TYPE(s) STRING;
   const STRING& s_str(fix_cstr(s)), delims_str(fix_cstr(delims));
 
   if (maxTokens.isSome() && maxTokens.get() == 0) {
@@ -288,9 +288,9 @@ inline auto pairs(
     const T1& s,
     const T2& delims1,
     const T3& delims2)
-    -> std::map<GET_TYPE(fix_cstr(s)), std::vector<GET_TYPE(fix_cstr(s))>>
+    -> std::map<GET_TYPE(s), std::vector<GET_TYPE(s)>>
 {
-  typedef GET_TYPE(fix_cstr(s)) STRING;
+  typedef GET_TYPE(s) STRING;
   const STRING& s_str(fix_cstr(s)),
       delims1_str(fix_cstr(delims1)),
       delims2_str(fix_cstr(delims2));
