@@ -351,24 +351,24 @@ std::basic_stringstream<T2>& append(
 }
 
 
-template <typename T>
-std::stringstream& join(
-    std::stringstream& stream,
-    const std::string& separator,
-    T&& tail)
+template <typename T1, typename T2, typename T3>
+std::basic_stringstream<T1>& join(
+    std::basic_stringstream<T1>& stream,
+    const T3& separator,
+    T2&& tail)
 {
-  return append(stream, std::forward<T>(tail));
+  return append<T1, T2>(stream, std::forward<T2>(tail));
 }
 
 
-template <typename THead, typename... TTail>
-std::stringstream& join(
-    std::stringstream& stream,
-    const std::string& separator,
+template <typename T1, typename T2, typename THead, typename... TTail>
+std::basic_stringstream<T1>& join(
+    std::basic_stringstream<T1>& stream,
+    const T2& separator,
     THead&& head,
     TTail&&... tail)
 {
-  append(stream, std::forward<THead>(head)) << separator;
+  append<T1, THead>(stream, std::forward<THead>(head)) << separator;
   internal::join(stream, separator, std::forward<TTail>(tail)...);
   return stream;
 }
