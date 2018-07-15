@@ -30,7 +30,7 @@
     typename std::remove_reference< \
     typename std::remove_pointer< \
     typename std::remove_all_extents<X>::type>::type>::type>::type
-#define GET_TYPE(X) GET_ORIGINAL(decltype(fix_cstr(X)))
+#define GET_TYPE(X) typename decide<decltype(X)>::type
 
 namespace strings {
 
@@ -44,28 +44,65 @@ enum Mode
   ANY
 };
 
+
 template <typename T>
-static inline auto fix_cstr(const T& ch)
-    -> std::basic_string<GET_ORIGINAL(T)> {
-  return std::basic_string<GET_ORIGINAL(T)>(ch);
+struct decide {
+  typedef typename std::conditional<
+      std::is_convertible<T, std::string>::value,
+      std::string,
+      typename std::conditional<
+          std::is_convertible<T, std::wstring>::value,
+          std::wstring,
+          std::basic_string<GET_ORIGINAL(T)>>::type>::type type;
+};
+
+
+template <bool DoCast, typename T1, typename T2>
+struct convert {
+  std::basic_string<T2> operator()(const T1 &obj);
+};
+
+template <typename T1, typename T2>
+struct convert<true, T1, T2> {
+  std::basic_string<T2> operator()(const T1 &obj) {
+    return (std::basic_string<T2>) obj;
+  }
+};
+
+template <typename T1, typename T2>
+struct convert<false, T1, T2> {
+  std::basic_string<T2> operator()(const T1 &obj) {
+    return std::basic_string<T2>() + obj;
+  }
+};
+
+
+template <typename T>
+static inline auto fix_cstr(const T &cstr) -> typename decide<T>::type {
+  typedef typename decide<T>::type STRING;
+  typedef typename STRING::value_type CHAR;
+  return convert<std::is_convertible<T, STRING>::value, T, CHAR>()(cstr);
 }
 
 template <typename T>
-static inline const std::basic_string<T>& fix_cstr(
-    const std::basic_string<T>& str) {
+static inline const std::basic_string<T> &fix_cstr(
+    const std::basic_string<T> &str) {
   return str;
 }
 
 template <typename T>
-static inline std::basic_string<T>&& fix_cstr(
-    const std::basic_string<T>&& str) {
+static inline std::basic_string<T> &&fix_cstr(
+    const std::basic_string<T> &&str) {
   return std::forward<std::basic_string<T>>(str);
 }
 
-template <typename T>
-static inline std::basic_string<T> fix_literal(const std::string& str) {
-  return std::basic_string<T>(str.cbegin(), str.cend());
+
+template <typename T1, typename T2>
+static inline std::basic_string<T1> fix_literal(const T2& literal) {
+  const GET_TYPE(literal)& str(literal);
+  return std::basic_string<T1>(str.cbegin(), str.cend());
 }
+
 
 template <typename T1, typename T2>
 inline auto remove(
@@ -316,7 +353,7 @@ inline std::basic_stringstream<T1>& append(
     std::basic_stringstream<T1>& stream,
     const T2& value)
 {
-  stream << value;
+  stream << ::stringify(std::forward<T2>(value));
   return stream;
 }
 
@@ -326,7 +363,7 @@ inline std::basic_stringstream<T1>& append(
     std::basic_stringstream<T1>& stream,
     const T2&& value)
 {
-  stream << value;
+  stream << ::stringify(std::forward<T2>(value));
   return stream;
 }
 
@@ -337,16 +374,6 @@ inline std::basic_stringstream<T>& append(
     const T*&& value)
 {
   stream << value;
-  return stream;
-}
-
-
-template <typename T1, typename T2>
-std::basic_stringstream<T2>& append(
-    std::basic_stringstream<T2>& stream,
-    T1&& value)
-{
-  stream << ::stringify(std::forward<T1>(value));
   return stream;
 }
 
@@ -411,10 +438,7 @@ auto join(
 
 
 // Ensure std::string doesn't fall into the iterable case
-inline std::string join(const std::string& seperator, const std::string& s) {
-  return s;
-}
-template <typename T1, typename T2>
+template <typename T1 = std::string, typename T2 = std::string>
 inline std::basic_string<T2> join(
     const T1& separator,
     const std::basic_string<T2>& s) {
@@ -422,7 +446,7 @@ inline std::basic_string<T2> join(
 }
 
 
-template <typename T1, typename T2>
+template <typename T1 = std::string, typename T2 = std::string>
 inline std::basic_string<T2> join(
     const T1& separator,
     const T2*& s) {
@@ -431,7 +455,7 @@ inline std::basic_string<T2> join(
 
 
 // Use duck-typing to join any iterable.
-template <typename T, typename Iterable>
+template <typename T = std::string, typename Iterable>
 inline auto join(
     const T& separator,
     const Iterable& i) -> GET_TYPE(separator)
@@ -450,16 +474,19 @@ inline auto join(
 }
 
 
+template <typename T = std::string>
 inline bool checkBracketsMatching(
-    const std::string& s,
-    const char openBracket,
-    const char closeBracket)
+    const T& s,
+    GET_TYPE(s)::value_type openBracket,
+    GET_TYPE(s)::value_type closeBracket)
 {
+  typedef GET_TYPE(s) STRING;
+  const STRING& s_str(fix_cstr(s));
   int count = 0;
-  for (size_t i = 0; i < s.length(); i++) {
-    if (s[i] == openBracket) {
+  for (size_t i = 0; i < s_str.length(); i++) {
+    if (s_str[i] == openBracket) {
       count++;
-    } else if (s[i] == closeBracket) {
+    } else if (s_str[i] == closeBracket) {
       count--;
     }
     if (count < 0) {
@@ -470,71 +497,50 @@ inline bool checkBracketsMatching(
 }
 
 
-inline bool startsWith(const std::string& s, const std::string& prefix)
+template <typename T1 = std::string, typename T2 = std::string>
+inline bool startsWith(const T1& s, const T2& prefix)
 {
-  return s.size() >= prefix.size() &&
-         std::equal(prefix.begin(), prefix.end(), s.begin());
-}
-
-inline bool startsWith(const std::wstring& s, const std::wstring& prefix)
-{
-  return s.size() >= prefix.size() &&
-         std::equal(prefix.begin(), prefix.end(), s.begin());
+  typedef GET_TYPE(s) STRING;
+  const STRING& s_str(fix_cstr(s)), prefix_str(fix_cstr(prefix));
+  return s_str.size() >= prefix_str.size() &&
+         std::equal(prefix_str.begin(), prefix_str.end(), s_str.begin());
 }
 
 
-inline bool startsWith(const std::string& s, const char* prefix)
+template <typename T1 = std::string, typename T2 = std::string>
+inline bool endsWith(const T1& s, const T2& suffix)
 {
-  size_t len = ::strnlen(prefix, s.size() + 1);
-  return s.size() >= len &&
-         std::equal(s.begin(), s.begin() + len, prefix);
+  typedef GET_TYPE(s) STRING;
+  const STRING& s_str(fix_cstr(s)), suffix_str(fix_cstr(suffix));
+  return s_str.size() >= suffix_str.size() &&
+         std::equal(suffix_str.rbegin(), suffix_str.rend(), s_str.rbegin());
 }
 
 
-inline bool startsWith(const std::string& s, char c)
+template <typename T1 = std::string, typename T2 = std::string>
+inline bool contains(const T1& s, const T2& substr)
 {
-  return !s.empty() && s.front() == c;
+  typedef GET_TYPE(s) STRING;
+  const STRING& s_str(fix_cstr(s)), substr_str(fix_cstr(substr));
+  return s_str.find(substr_str) != STRING::npos;
 }
 
 
-inline bool endsWith(const std::string& s, const std::string& suffix)
+template <typename T = std::string>
+inline auto lower(const T& s) -> GET_TYPE(s)
 {
-  return s.size() >= suffix.size() &&
-         std::equal(suffix.rbegin(), suffix.rend(), s.rbegin());
-}
-
-
-inline bool endsWidth(const std::string& s, const char* suffix)
-{
-  size_t len = ::strnlen(suffix, s.size() + 1);
-  return s.size() >= len &&
-         std::equal(s.end() - len, s.end(), suffix);
-}
-
-
-inline bool endsWith(const std::string& s, char c)
-{
-  return !s.empty() && s.back() == c;
-}
-
-
-inline bool contains(const std::string& s, const std::string& substr)
-{
-  return s.find(substr) != std::string::npos;
-}
-
-
-inline std::string lower(const std::string& s)
-{
-  std::string result = s;
+  typedef GET_TYPE(s) STRING;
+  STRING result = fix_cstr(s);
   std::transform(result.begin(), result.end(), result.begin(), ::tolower);
   return result;
 }
 
 
-inline std::string upper(const std::string& s)
+template <typename T = std::string>
+inline auto upper(const T& s) -> GET_TYPE(s)
 {
-  std::string result = s;
+  typedef GET_TYPE(s) STRING;
+  STRING result = fix_cstr(s);
   std::transform(result.begin(), result.end(), result.begin(), ::toupper);
   return result;
 }
