@@ -104,7 +104,7 @@ static inline std::basic_string<T1> fix_literal(const T2& literal) {
 }
 
 
-template <typename T1, typename T2>
+template <typename T1 = std::string, typename T2 = std::string>
 inline auto remove(
     const T1& from,
     const T2& substring,
@@ -135,7 +135,7 @@ inline auto remove(
 }
 
 
-template <typename T1, typename T2>
+template <typename T1 = std::string, typename T2 = std::string>
 inline auto trim(
     const T1& from,
     Mode mode,
@@ -173,7 +173,8 @@ inline auto trim(
   return from_str.substr(start, length);
 }
 
-template <typename T>
+
+template <typename T = std::string>
 inline auto trim(const T& from, Mode mode = ANY) -> GET_TYPE(from)
 {
   typedef GET_TYPE(from) STRING;
@@ -182,23 +183,21 @@ inline auto trim(const T& from, Mode mode = ANY) -> GET_TYPE(from)
   return trim<STRING, STRING>(from_str, mode, chars);
 }
 
+
 // Helper providing some syntactic sugar for when 'mode' is ANY but
 // the 'chars' are specified.
-template <typename T1, typename T2>
-inline auto trim(
-    const T1& from,
-    const T2& chars) -> GET_TYPE(from)
+template <typename T1 = std::string, typename T2 = std::string>
+inline auto trim(const T1& from, const T2& chars) -> GET_TYPE(from)
 {
   return trim(fix_cstr(from), ANY, fix_cstr(chars));
 }
 
 
 // Replaces all the occurrences of the 'from' string with the 'to' string.
-template <typename T1, typename T2, typename T3>
-inline auto replace(
-    const T1& s,
-    const T2& from,
-    const T3& to) -> GET_TYPE(s)
+template <typename T1 = std::string,
+          typename T2 = std::string,
+          typename T3 = std::string>
+inline auto replace(const T1& s, const T2& from, const T3& to) -> GET_TYPE(s)
 {
   typedef GET_TYPE(s) STRING;
   const STRING& s_str(fix_cstr(s)),
@@ -226,7 +225,7 @@ inline auto replace(
 // Optionally, the maximum number of tokens to be returned can be
 // specified. If the maximum number of tokens is reached, the last
 // token returned contains the remainder of the input string.
-template <typename T1, typename T2>
+template <typename T1 = std::string, typename T2 = std::string>
 inline auto tokenize(
     const T1& s,
     const T2& delims,
@@ -276,7 +275,7 @@ inline auto tokenize(
 // Optionally, the maximum number of tokens to be returned can be
 // specified. If the maximum number of tokens is reached, the last
 // token returned contains the remainder of the input string.
-template <typename T1, typename T2>
+template <typename T1 = std::string, typename T2 = std::string>
 inline auto split(
     const T1& s,
     const T2& delims,
@@ -320,7 +319,9 @@ inline auto split(
 // Would return a map with the following:
 //   bar: ["2"]
 //   foo: ["1", "3"]
-template <typename T1, typename T2, typename T3>
+template <typename T1 = std::string,
+          typename T2 = std::string,
+          typename T3 = std::string>
 inline auto pairs(
     const T1& s,
     const T2& delims1,
@@ -348,37 +349,49 @@ inline auto pairs(
 
 namespace internal {
 
-template <typename T1, typename T2>
+template <typename T1 = char, typename T2 = std::string>
 inline std::basic_stringstream<T1>& append(
     std::basic_stringstream<T1>& stream,
     const T2& value)
 {
-  stream << ::stringify(std::forward<T2>(value));
+  stream << ::stringify(value);
   return stream;
 }
 
 
-template <typename T1, typename T2>
-inline std::basic_stringstream<T1>& append(
-    std::basic_stringstream<T1>& stream,
-    const T2&& value)
-{
-  stream << ::stringify(std::forward<T2>(value));
-  return stream;
-}
-
-
-template <typename T>
+template <typename T = char>
 inline std::basic_stringstream<T>& append(
     std::basic_stringstream<T>& stream,
-    const T*&& value)
+    const std::basic_string<T>& value)
 {
   stream << value;
   return stream;
 }
 
 
-template <typename T1, typename T2, typename T3>
+template <typename T = char>
+inline std::basic_stringstream<T>& append(
+    std::basic_stringstream<T>& stream,
+    const std::basic_string<T>&& value)
+{
+  stream << std::forward<std::basic_string<T>>(value);
+  return stream;
+}
+
+
+template <typename T = char>
+inline std::basic_stringstream<T>& append(
+    std::basic_stringstream<T>& stream,
+    const T*& value)
+{
+  stream << value;
+  return stream;
+}
+
+
+template <typename T1 = char,
+          typename T2 = std::string,
+          typename T3 = std::string>
 std::basic_stringstream<T1>& join(
     std::basic_stringstream<T1>& stream,
     const T3& separator,
@@ -418,7 +431,10 @@ std::basic_stringstream<T1>& join(
 // templatized Iterable join below. This means this implementation of
 // strings::join() is only activated if there are 2 or more things to
 // join.
-template <typename T, typename THead1, typename THead2, typename... TTail>
+template <typename T,
+          typename THead1,
+          typename THead2,
+          typename... TTail>
 auto join(
     const T& separator,
     THead1&& head1,
@@ -438,7 +454,7 @@ auto join(
 
 
 // Ensure std::string doesn't fall into the iterable case
-template <typename T1 = std::string, typename T2 = std::string>
+template <typename T1 = std::string, typename T2 = char>
 inline std::basic_string<T2> join(
     const T1& separator,
     const std::basic_string<T2>& s) {
@@ -446,7 +462,7 @@ inline std::basic_string<T2> join(
 }
 
 
-template <typename T1 = std::string, typename T2 = std::string>
+template <typename T1 = std::string, typename T2 = char>
 inline std::basic_string<T2> join(
     const T1& separator,
     const T2*& s) {
@@ -455,7 +471,7 @@ inline std::basic_string<T2> join(
 
 
 // Use duck-typing to join any iterable.
-template <typename T = std::string, typename Iterable>
+template <typename Iterable, typename T = std::string>
 inline auto join(
     const T& separator,
     const Iterable& i) -> GET_TYPE(separator)
