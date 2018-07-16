@@ -25,11 +25,6 @@
 #include "option.hpp"
 #include "stringify.hpp"
 
-#define GET_ORIGINAL(X) \
-    typename std::remove_const< \
-    typename std::remove_reference< \
-    typename std::remove_pointer< \
-    typename std::remove_all_extents<X>::type>::type>::type>::type
 #define GET_TYPE(X) typename decide<decltype(X)>::type
 
 namespace strings {
@@ -43,58 +38,6 @@ enum Mode
   SUFFIX,
   ANY
 };
-
-
-template <typename T>
-struct decide {
-  typedef typename std::conditional<
-      std::is_convertible<T, std::string>::value,
-      std::string,
-      typename std::conditional<
-          std::is_convertible<T, std::wstring>::value,
-          std::wstring,
-          std::basic_string<GET_ORIGINAL(T)>>::type>::type type;
-};
-
-
-template <bool DoCast, typename T1, typename T2>
-struct convert {
-  std::basic_string<T2> operator()(const T1 &obj);
-};
-
-template <typename T1, typename T2>
-struct convert<true, T1, T2> {
-  std::basic_string<T2> operator()(const T1 &obj) {
-    return (std::basic_string<T2>) obj;
-  }
-};
-
-template <typename T1, typename T2>
-struct convert<false, T1, T2> {
-  std::basic_string<T2> operator()(const T1 &obj) {
-    return std::basic_string<T2>() + obj;
-  }
-};
-
-
-template <typename T>
-static inline auto fix_cstr(const T &cstr) -> typename decide<T>::type {
-  typedef typename decide<T>::type STRING;
-  typedef typename STRING::value_type CHAR;
-  return convert<std::is_convertible<T, STRING>::value, T, CHAR>()(cstr);
-}
-
-template <typename T>
-static inline const std::basic_string<T> &fix_cstr(
-    const std::basic_string<T> &str) {
-  return str;
-}
-
-template <typename T>
-static inline std::basic_string<T> &&fix_cstr(
-    const std::basic_string<T> &&str) {
-  return std::forward<std::basic_string<T>>(str);
-}
 
 
 template <typename T1, typename T2>
@@ -111,7 +54,7 @@ inline auto remove(
     Mode mode = ANY) -> GET_TYPE(from)
 {
   typedef GET_TYPE(from) STRING;
-  const STRING& from_str(fix_cstr(from)), substring_str(fix_cstr(substring));
+  const STRING& from_str(stringify(from)), substring_str(stringify(substring));
 
   STRING result = from_str;
 
@@ -142,7 +85,7 @@ inline auto trim(
     const T2& chars) -> GET_TYPE(from)
 {
   typedef GET_TYPE(from) STRING;
-  const STRING& from_str(fix_cstr(from)), chars_str(fix_cstr(chars));
+  const STRING& from_str(stringify(from)), chars_str(stringify(chars));
 
   size_t start = 0;
   Option<size_t> end = None();
@@ -178,7 +121,7 @@ template <typename T = std::string>
 inline auto trim(const T& from, Mode mode = ANY) -> GET_TYPE(from)
 {
   typedef GET_TYPE(from) STRING;
-  const STRING& from_str(fix_cstr(from));
+  const STRING& from_str(stringify(from));
   STRING chars(fix_literal<typename STRING::value_type>(WHITESPACE));
   return trim<STRING, STRING>(from_str, mode, chars);
 }
@@ -189,7 +132,7 @@ inline auto trim(const T& from, Mode mode = ANY) -> GET_TYPE(from)
 template <typename T1 = std::string, typename T2 = std::string>
 inline auto trim(const T1& from, const T2& chars) -> GET_TYPE(from)
 {
-  return trim(fix_cstr(from), ANY, fix_cstr(chars));
+  return trim(stringify(from), ANY, stringify(chars));
 }
 
 
@@ -200,9 +143,9 @@ template <typename T1 = std::string,
 inline auto replace(const T1& s, const T2& from, const T3& to) -> GET_TYPE(s)
 {
   typedef GET_TYPE(s) STRING;
-  const STRING& s_str(fix_cstr(s)),
-      from_str(fix_cstr(from)),
-      to_str(fix_cstr(to));
+  const STRING& s_str(stringify(s)),
+      from_str(stringify(from)),
+      to_str(stringify(to));
 
   STRING result = s_str;
   size_t index = 0;
@@ -233,7 +176,7 @@ inline auto tokenize(
     -> std::vector<GET_TYPE(s)>
 {
   typedef GET_TYPE(s) STRING;
-  const STRING& s_str(fix_cstr(s)), delims_str(fix_cstr(delims));
+  const STRING& s_str(stringify(s)), delims_str(stringify(delims));
 
   if (maxTokens.isSome() && maxTokens.get() == 0) {
     return {};
@@ -283,7 +226,7 @@ inline auto split(
     -> std::vector<GET_TYPE(s)>
 {
   typedef GET_TYPE(s) STRING;
-  const STRING& s_str(fix_cstr(s)), delims_str(fix_cstr(delims));
+  const STRING& s_str(stringify(s)), delims_str(stringify(delims));
 
   if (maxTokens.isSome() && maxTokens.get() == 0) {
     return {};
@@ -329,9 +272,9 @@ inline auto pairs(
     -> std::map<GET_TYPE(s), std::vector<GET_TYPE(s)>>
 {
   typedef GET_TYPE(s) STRING;
-  const STRING& s_str(fix_cstr(s)),
-      delims1_str(fix_cstr(delims1)),
-      delims2_str(fix_cstr(delims2));
+  const STRING& s_str(stringify(s)),
+      delims1_str(stringify(delims1)),
+      delims2_str(stringify(delims2));
 
   std::map<STRING, std::vector<STRING>> result;
 
@@ -466,7 +409,7 @@ template <typename T1 = std::string, typename T2 = char>
 inline std::basic_string<T2> join(
     const T1& separator,
     const T2*& s) {
-  return fix_cstr(s);
+  return stringify(s);
 }
 
 
@@ -477,7 +420,7 @@ inline auto join(
     const Iterable& i) -> GET_TYPE(separator)
 {
   typedef GET_TYPE(separator) STRING;
-  const STRING& sep_str(fix_cstr(separator));
+  const STRING& sep_str(stringify(separator));
   STRING result;
   typename Iterable::const_iterator iterator = i.begin();
   while (iterator != i.end()) {
@@ -497,7 +440,7 @@ inline bool checkBracketsMatching(
     GET_TYPE(s)::value_type closeBracket)
 {
   typedef GET_TYPE(s) STRING;
-  const STRING& s_str(fix_cstr(s));
+  const STRING& s_str(stringify(s));
   int count = 0;
   for (size_t i = 0; i < s_str.length(); i++) {
     if (s_str[i] == openBracket) {
@@ -517,7 +460,7 @@ template <typename T1 = std::string, typename T2 = std::string>
 inline bool startsWith(const T1& s, const T2& prefix)
 {
   typedef GET_TYPE(s) STRING;
-  const STRING& s_str(fix_cstr(s)), prefix_str(fix_cstr(prefix));
+  const STRING& s_str(stringify(s)), prefix_str(stringify(prefix));
   return s_str.size() >= prefix_str.size() &&
          std::equal(prefix_str.begin(), prefix_str.end(), s_str.begin());
 }
@@ -527,7 +470,7 @@ template <typename T1 = std::string, typename T2 = std::string>
 inline bool endsWith(const T1& s, const T2& suffix)
 {
   typedef GET_TYPE(s) STRING;
-  const STRING& s_str(fix_cstr(s)), suffix_str(fix_cstr(suffix));
+  const STRING& s_str(stringify(s)), suffix_str(stringify(suffix));
   return s_str.size() >= suffix_str.size() &&
          std::equal(suffix_str.rbegin(), suffix_str.rend(), s_str.rbegin());
 }
@@ -537,7 +480,7 @@ template <typename T1 = std::string, typename T2 = std::string>
 inline bool contains(const T1& s, const T2& substr)
 {
   typedef GET_TYPE(s) STRING;
-  const STRING& s_str(fix_cstr(s)), substr_str(fix_cstr(substr));
+  const STRING& s_str(stringify(s)), substr_str(stringify(substr));
   return s_str.find(substr_str) != STRING::npos;
 }
 
@@ -546,7 +489,7 @@ template <typename T = std::string>
 inline auto lower(const T& s) -> GET_TYPE(s)
 {
   typedef GET_TYPE(s) STRING;
-  STRING result = fix_cstr(s);
+  STRING result = stringify(s);
   std::transform(result.begin(), result.end(), result.begin(), ::tolower);
   return result;
 }
@@ -556,7 +499,7 @@ template <typename T = std::string>
 inline auto upper(const T& s) -> GET_TYPE(s)
 {
   typedef GET_TYPE(s) STRING;
-  STRING result = fix_cstr(s);
+  STRING result = stringify(s);
   std::transform(result.begin(), result.end(), result.begin(), ::toupper);
   return result;
 }
