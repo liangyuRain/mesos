@@ -77,7 +77,7 @@ inline Try<std::string> nodename()
     return WindowsError();
   }
 
-  return stringify(std::wstring(buffer.data()));
+  return short_stringify(std::wstring(buffer.data()));
 }
 
 
@@ -601,7 +601,7 @@ inline Try<std::string> var()
     return WindowsError("os::var: `GetAllUsersProfileDirectoryW` failed");
   }
 
-  return stringify(std::wstring(buffer.data()));
+  return short_stringify(std::wstring(buffer.data()));
 }
 
 

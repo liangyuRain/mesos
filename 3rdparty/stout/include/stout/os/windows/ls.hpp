@@ -60,7 +60,7 @@ inline Try<std::list<std::string>> ls(const std::string& directory)
       continue;
     }
 
-    result.push_back(stringify(current_file));
+    result.push_back(short_stringify(current_file));
   } while (::FindNextFileW(search_handle.get(), &found));
 
   return result;
