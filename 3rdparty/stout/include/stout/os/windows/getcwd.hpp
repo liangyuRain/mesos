@@ -39,7 +39,7 @@ inline std::string getcwd()
   CHECK(result != 0) << "Failed to determine current directory";
 
   return strings::remove(
-      stringify(std::wstring(buffer.data())),
+      short_stringify(std::wstring(buffer.data())),
       os::LONGPATH_PREFIX,
       strings::Mode::PREFIX);
 }

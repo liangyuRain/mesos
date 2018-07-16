@@ -115,7 +115,7 @@ inline Try<std::list<std::string>> list(const std::string& pattern)
 
     // Ignore `.` and `..` entries.
     if (current_file.compare(L".") != 0 && current_file.compare(L"..") != 0) {
-      found_files.push_back(path::join(dirname, stringify(current_file)));
+      found_files.push_back(path::join(dirname, short_stringify(current_file)));
     }
   } while (::FindNextFileW(search_handle.get(), &found));
 

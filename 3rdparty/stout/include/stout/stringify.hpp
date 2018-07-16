@@ -55,7 +55,7 @@ inline std::string stringify(const std::string& str)
 
 
 #ifdef __WINDOWS__
-inline std::string stringify(const std::wstring& str)
+inline std::string short_stringify(const std::wstring& str)
 {
   // Convert UTF-16 `wstring` to UTF-8 `string`.
   static std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>
