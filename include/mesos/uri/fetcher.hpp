@@ -88,6 +88,8 @@ public:
      *
      * If not overrided by child classes, `urls` is simply ignored and
      * `fetch(uri, directory, data)` is used.
+     * 
+     * This is used to support version 2 schema 2 image manifest.
      *
      * @param uri the URI to fetch
      * @param urls the URLs to locate the resource
@@ -126,6 +128,8 @@ public:
    * Fetches a URI with multiple possible URLs to the given directory.
    * This method will dispatch the call to the corresponding plugin based
    * on uri.scheme.
+   * 
+   * This is used to support version 2 schema 2 image manifest.
    *
    * @param uri the URI to fetch
    * @param urls the URLs to locate the resource

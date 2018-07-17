@@ -99,10 +99,7 @@ static Future<http::Response> curl(
 #ifdef __WINDOWS__
   // Replace all '\' to '/'. Create a new scope to shadow original uri.
   {
-    string uri(uri);
-    for (auto &c : uri) {
-      if (c == '\\') c = '/';
-    }
+    string uri(strings::replace(uri, "\\", "/"));
 #endif
 
   vector<string> argv = {
@@ -238,10 +235,7 @@ static Future<int> download(
 #ifdef __WINDOWS__
   // Replace all '\' to '/'. Create a new scope to shadow original uri.
   {
-    string uri(uri);
-    for (auto &c : uri) {
-      if (c == '\\') c = '/';
-    }
+    string uri(strings::replace(uri, "\\", "/"));
 #endif
 
   vector<string> argv = {
