@@ -95,7 +95,6 @@ static inline std::basic_string<T>&& stringify(
 }
 
 
-#ifdef __WINDOWS__
 inline std::string short_stringify(const std::wstring& str)
 {
   // Convert UTF-16 `wstring` to UTF-8 `string`.
@@ -105,6 +104,11 @@ inline std::string short_stringify(const std::wstring& str)
         L"UTF-16 to UTF-8 conversion failed");
 
   return converter.to_bytes(str);
+}
+
+inline std::string short_stringify(const std::string& str)
+{
+  return str;
 }
 
 
@@ -118,7 +122,11 @@ inline std::wstring wide_stringify(const std::string& str)
 
   return converter.from_bytes(str);
 }
-#endif // __WINDOWS__
+
+inline std::wstring wide_stringify(const std::wstring& str)
+{
+  return str;
+}
 
 
 template<>
