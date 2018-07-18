@@ -277,17 +277,15 @@ static constexpr char DOCKER_REGISTRY_HOST[] = "registry-1.docker.io";
 
 class DockerFetcherPluginTest : public TemporaryDirectoryTest {};
 
+#ifdef __WINDOWS__
+static string repo = "microsoft/nanoserver";
+#else
+static string repo = "library/busybox";
+#endif // __WINDOWS__
 
 TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchManifest)
 {
-  URI uri = uri::docker::manifest(
-#ifdef __WINDOWS__
-      "microsoft/nanoserver",
-#else
-      "library/busybox",
-#endif
-      "latest",
-      DOCKER_REGISTRY_HOST);
+  URI uri = uri::docker::manifest(repo, "latest", DOCKER_REGISTRY_HOST);
 
   Try<Owned<uri::Fetcher>> fetcher = uri::fetcher::create();
   ASSERT_SOME(fetcher);
@@ -299,47 +297,34 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchManifest)
   Try<string> _manifest = os::read(path::join(dir, "manifest"));
   ASSERT_SOME(_manifest);
 
-  Try<docker::spec::v2::ImageManifest> manifest =
-    docker::spec::v2::parse(_manifest.get());
-
-#ifdef __WINDOWS__
-  if (manifest.isError()) {
-    // Try Verision 2 Schema 2
-    Try<docker::spec::v2_2::ImageManifest> manifest =
+  Try<docker::spec::v2_2::ImageManifest> manifest =
       docker::spec::v2_2::parse(_manifest.get());
+
+  if (!manifest.isError()) {
     ASSERT_SOME(manifest);
+    EXPECT_EQ(2, manifest->schemaversion());
   } else {
-#endif
-  ASSERT_SOME(manifest);
-#ifdef __WINDOWS__
-  EXPECT_EQ("microsoft/nanoserver", manifest->name());
-#else
-  EXPECT_EQ("library/busybox", manifest->name());
-#endif
-  EXPECT_EQ("latest", manifest->tag());
-#ifdef __WINDOWS__
+    Try<docker::spec::v2::ImageManifest> manifest =
+        docker::spec::v2::parse(_manifest.get());
+    ASSERT_SOME(manifest);
+    EXPECT_EQ(repo, manifest->name());
+    EXPECT_EQ("latest", manifest->tag());
   }
-#endif
 }
 
 
 TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchBlob)
 {
-  const string digest =
-#ifdef __WINDOWS__
-    "sha256:54389c2d19b423943102864aaf3fc1296e5dd140a074b5bd6700de858a8e5479";
-#else
-    "sha256:a3ed95caeb02ffe68cdd9fd84406680ae93d633cb16422d00e8a7c22955b46d4";
-#endif
+  string digest;
+  if (repo == "microsoft/nanoserver") {
+    digest = "sha256:54389c2d19b423943102864aaf3fc" 
+             "1296e5dd140a074b5bd6700de858a8e5479";
+  } else if (repo == "library/busybox") {
+    digest = "sha256:a3ed95caeb02ffe68cdd9fd844066"
+             "80ae93d633cb16422d00e8a7c22955b46d4";
+  }
 
-  URI uri = uri::docker::blob(
-#ifdef __WINDOWS__
-      "microsoft/nanoserver",
-#else
-      "library/busybox",
-#endif
-      digest,
-      DOCKER_REGISTRY_HOST);
+  URI uri = uri::docker::blob(repo, digest, DOCKER_REGISTRY_HOST);
 
   Try<Owned<uri::Fetcher>> fetcher = uri::fetcher::create();
   ASSERT_SOME(fetcher);
@@ -355,14 +340,7 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchBlob)
 // Fetches the image manifest and all blobs in that image.
 TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchImage)
 {
-  URI uri = uri::docker::image(
-#ifdef __WINDOWS__
-      "microsoft/nanoserver",
-#else
-      "library/busybox",
-#endif
-      "latest",
-      DOCKER_REGISTRY_HOST);
+  URI uri = uri::docker::image(repo, "latest", DOCKER_REGISTRY_HOST);
 
   Try<Owned<uri::Fetcher>> fetcher = uri::fetcher::create();
   ASSERT_SOME(fetcher);
@@ -374,49 +352,34 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchImage)
   Try<string> _manifest = os::read(path::join(dir, "manifest"));
   ASSERT_SOME(_manifest);
 
-  Try<docker::spec::v2::ImageManifest> manifest =
-    docker::spec::v2::parse(_manifest.get());
-
-#ifdef __WINDOWS__
-  if (manifest.isError()) {
-    // Try Verision 2 Schema 2
-    Try<docker::spec::v2_2::ImageManifest> manifest =
+  Try<docker::spec::v2_2::ImageManifest> manifest =
       docker::spec::v2_2::parse(_manifest.get());
+
+  if (!manifest.isError()) {
     ASSERT_SOME(manifest);
 
     for (int i = 0; i < manifest->layers_size(); i++) {
       EXPECT_TRUE(os::exists(path::join(dir, manifest->layers(i).digest())));
     }
   } else {
-#endif
-  ASSERT_SOME(manifest);
-#ifdef __WINDOWS__
-  EXPECT_EQ("microsoft/nanoserver", manifest->name());
-#else
-  EXPECT_EQ("library/busybox", manifest->name());
-#endif
-  EXPECT_EQ("latest", manifest->tag());
+    Try<docker::spec::v2::ImageManifest> manifest =
+        docker::spec::v2::parse(_manifest.get());
 
-  for (int i = 0; i < manifest->fslayers_size(); i++) {
-    EXPECT_TRUE(os::exists(path::join(dir, manifest->fslayers(i).blobsum())));
+    ASSERT_SOME(manifest);
+    EXPECT_EQ(repo, manifest->name());
+    EXPECT_EQ("latest", manifest->tag());
+
+    for (int i = 0; i < manifest->fslayers_size(); i++) {
+      EXPECT_TRUE(os::exists(path::join(dir, manifest->fslayers(i).blobsum())));
+    }
   }
-#ifdef __WINDOWS__
-  }
-#endif
 }
 
 
 // This test verifies invoking 'fetch' by plugin name.
 TEST_F(DockerFetcherPluginTest, INTERNET_CURL_InvokeFetchByName)
 {
-  URI uri = uri::docker::image(
-#ifdef __WINDOWS__
-      "microsoft/nanoserver",
-#else
-      "library/busybox",
-#endif
-      "latest",
-      DOCKER_REGISTRY_HOST);
+  URI uri = uri::docker::image(repo, "latest", DOCKER_REGISTRY_HOST);
 
   Try<Owned<uri::Fetcher>> fetcher = uri::fetcher::create();
   ASSERT_SOME(fetcher);
@@ -430,36 +393,27 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_InvokeFetchByName)
   Try<string> _manifest = os::read(path::join(dir, "manifest"));
   ASSERT_SOME(_manifest);
 
-  Try<docker::spec::v2::ImageManifest> manifest =
-    docker::spec::v2::parse(_manifest.get());
-
-#ifdef __WINDOWS__
-  if (manifest.isError()) {
-    // Try Verision 2 Schema 2
-    Try<docker::spec::v2_2::ImageManifest> manifest =
+  Try<docker::spec::v2_2::ImageManifest> manifest =
       docker::spec::v2_2::parse(_manifest.get());
+
+  if (!manifest.isError()) {
     ASSERT_SOME(manifest);
 
     for (int i = 0; i < manifest->layers_size(); i++) {
       EXPECT_TRUE(os::exists(path::join(dir, manifest->layers(i).digest())));
     }
-  }
-  else {
-#endif
+  } else {
+    Try<docker::spec::v2::ImageManifest> manifest =
+        docker::spec::v2::parse(_manifest.get());
+
     ASSERT_SOME(manifest);
-#ifdef __WINDOWS__
-  EXPECT_EQ("microsoft/nanoserver", manifest->name());
-#else
-  EXPECT_EQ("library/busybox", manifest->name());
-#endif
+    EXPECT_EQ(repo, manifest->name());
     EXPECT_EQ("latest", manifest->tag());
 
     for (int i = 0; i < manifest->fslayers_size(); i++) {
       EXPECT_TRUE(os::exists(path::join(dir, manifest->fslayers(i).blobsum())));
     }
-#ifdef __WINDOWS__
   }
-#endif
 }
 
 
