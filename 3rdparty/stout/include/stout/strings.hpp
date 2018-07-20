@@ -40,13 +40,6 @@ enum Mode
 };
 
 
-template <typename T1, typename T2>
-static inline std::basic_string<T1> fix_literal(const T2& literal) {
-  const GET_TYPE(literal)& str(literal);
-  return std::basic_string<T1>(str.cbegin(), str.cend());
-}
-
-
 template <typename T1 = std::string, typename T2 = std::string>
 inline auto remove(
     const T1& from,
@@ -122,7 +115,7 @@ inline auto trim(const T& from, Mode mode = ANY) -> GET_TYPE(from)
 {
   typedef GET_TYPE(from) STRING;
   const STRING& from_str(stringify(from));
-  STRING chars(fix_literal<typename STRING::value_type>(WHITESPACE));
+  STRING chars(utf_convert<typename STRING::value_type>(WHITESPACE));
   return trim<STRING, STRING>(from_str, mode, chars);
 }
 

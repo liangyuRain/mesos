@@ -182,10 +182,11 @@ struct utf_convert<false, char, wchar_t> {
 template <typename T1, typename T2>
 inline std::basic_string<T1> utf_convert(const T2& str) {
   typedef GET_TYPE(str) STRING;
+  typedef typename STRING::value_type CHAR;
   const STRING& str_str(stringify(str));
-  return internal::utf_convert<std::is_same<T1, T2>::value, 
-                               T1, 
-                               typename STRING::value_type>()(str_str);
+  return ::internal::utf_convert<std::is_same<T1, CHAR>::value, 
+                                 T1, 
+                                 CHAR>()(str_str);
 }
 
 
