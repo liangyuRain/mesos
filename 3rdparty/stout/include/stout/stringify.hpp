@@ -33,6 +33,7 @@
 #include "hashmap.hpp"
 #include "set.hpp"
 
+#define GET_TYPE(X) typename decide<decltype(X)>::type
 
 template <typename T>
 struct decide {
@@ -95,6 +96,32 @@ static inline std::basic_string<T>&& stringify(
 }
 
 
+namespace internal {
+
+template <bool same, typename T1, typename T2>
+struct utf_convert {
+  std::basic_string<T1> operator()(const std::basic_string<T2>& str);
+};
+
+
+template <typename T>
+struct utf_convert<true, T, T> {
+  std::basic_string<T> operator()(const std::basic_string<T>& str) {
+    return str;
+  }
+};
+
+
+template <typename T1, typename T2>
+struct utf_convert<false, T1, T2> {
+  std::basic_string<T1> operator()(const std::basic_string<T2>& str) {
+    return std::basic_string<T1>(str.cbegin(), str.cend());
+  }
+};
+
+} // internal
+
+
 #ifdef __WINDOWS__
 inline std::string short_stringify(const std::wstring& str)
 {
@@ -130,7 +157,36 @@ inline std::wstring wide_stringify(const std::wstring& str)
 {
   return str;
 }
+
+namespace internal {
+
+template <>
+struct utf_convert<false, wchar_t, char> {
+  std::basic_string<wchar_t> operator()(const std::basic_string<char>& str) {
+    return wide_stringify(str);
+  }
+};
+
+
+template <>
+struct utf_convert<false, char, wchar_t> {
+  std::basic_string<char> operator()(const std::basic_string<wchar_t>& str) {
+    return short_stringify(str);
+  }
+};
+
+} // internal
 #endif // __WINDOWS__
+
+
+template <typename T1, typename T2>
+inline std::basic_string<T1> utf_convert(const T2& str) {
+  typedef GET_TYPE(str) STRING;
+  const STRING& str_str(stringify(str));
+  return internal::utf_convert<std::is_same<T1, T2>::value, 
+                               T1, 
+                               typename STRING::value_type>()(str_str);
+}
 
 
 template<>
