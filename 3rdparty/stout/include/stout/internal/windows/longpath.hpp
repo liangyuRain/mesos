@@ -35,22 +35,41 @@ namespace windows {
 //
 // It then converts the path to UTF-16, appropriate for use in Unicode versions
 // of Windows filesystem APIs which support lengths greater than NAME_MAX.
-inline std::wstring longpath(const std::string& path)
+inline std::wstring longpath(const std::wstring& path)
 {
   const size_t max_path_length = 248;
   if (path.size() >= max_path_length &&
       path::absolute(path) &&
-      !strings::startsWith(path, os::LONGPATH_PREFIX)) {
-    return wide_stringify(os::LONGPATH_PREFIX + path);
+      !strings::startsWith(path, wide_stringify(os::LONGPATH_PREFIX))) {
+    return wide_stringify(os::LONGPATH_PREFIX) + path;
   } else {
-    return wide_stringify(path);
+    return path;
   }
 }
 
 
-inline std::wstring longpath(const std::wstring& path)
+inline std::wstring longpath(std::wstring&& path)
 {
-  return longpath(short_stringify(path));
+  const size_t max_path_length = 248;
+  if (path.size() >= max_path_length &&
+      path::absolute(path) &&
+      !strings::startsWith(path, wide_stringify(os::LONGPATH_PREFIX))) {
+    return wide_stringify(os::LONGPATH_PREFIX) + path;
+  } else {
+    return std::move(path);
+  }
+}
+
+
+inline std::wstring longpath(const std::string& path)
+{
+  return longpath(wide_stringify(path));
+}
+
+
+inline std::wstring longpath(std::string&& path)
+{
+  return longpath(wide_stringify(std::move(path)));
 }
 
 } // namespace windows {

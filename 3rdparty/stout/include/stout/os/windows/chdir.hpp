@@ -25,7 +25,7 @@
 
 namespace os {
 
-inline Try<Nothing> chdir(const std::string& directory)
+inline Try<Nothing> chdir(const std::wstring& directory)
 {
   std::wstring longpath = ::internal::windows::longpath(directory);
   if (::SetCurrentDirectoryW(longpath.data()) == 0) {
@@ -33,6 +33,11 @@ inline Try<Nothing> chdir(const std::string& directory)
   }
 
   return Nothing();
+}
+
+inline Try<Nothing> chdir(const std::string& directory)
+{
+  return chdir(wide_stringify(directory));
 }
 
 } // namespace os {

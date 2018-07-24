@@ -64,7 +64,7 @@ inline Try<Nothing> wait_on_delete(const std::string& path)
 
 namespace os {
 
-inline Try<Nothing> rm(const std::string& path)
+inline Try<Nothing> rm(const std::wstring& longpath)
 {
   // This function uses either `RemoveDirectory` or `DeleteFile` to remove the
   // actual filesystem entry. These WinAPI functions are being used instead of
@@ -81,8 +81,7 @@ inline Try<Nothing> rm(const std::string& path)
   // [2] https://msdn.microsoft.com/en-us/library/windows/desktop/aa365682(v=vs.85).aspx#deletefile_and_deletefiletransacted
   // [3] http://pubs.opengroup.org/onlinepubs/009695399/functions/remove.html
   // [4] http://pubs.opengroup.org/onlinepubs/009695399/functions/rmdir.html
-  const std::wstring longpath = ::internal::windows::longpath(path);
-  const BOOL result = os::stat::isdir(path)
+  const BOOL result = os::stat::isdir(short_stringify(longpath))
       ? ::RemoveDirectoryW(longpath.data())
       : ::DeleteFileW(longpath.data());
 
@@ -95,12 +94,18 @@ inline Try<Nothing> rm(const std::string& path)
   // immediately fail with "directory not empty" if there still exists a marked
   // for deletion but not yet deleted file. By making waiting synchronously, we
   // gain the behavior of the POSIX API.
-  Try<Nothing> deleted = ::internal::windows::wait_on_delete(path);
+  Try<Nothing> deleted = 
+      ::internal::windows::wait_on_delete(short_stringify(longpath));
   if (deleted.isError()) {
     return Error("wait_on_delete failed " + deleted.error());
   }
 
   return Nothing();
+}
+
+inline Try<Nothing> rm(const std::string& path)
+{
+  return rm(::internal::windows::longpath(path));
 }
 
 } // namespace os {

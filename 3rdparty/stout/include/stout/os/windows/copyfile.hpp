@@ -36,7 +36,7 @@ namespace os {
 // NOLINT(whitespace/line_length)
 
 inline Try<Nothing> copyfile(
-    const std::string& source, const std::string& destination)
+    const std::wstring& source, const std::wstring& destination)
 {
   if (!path::absolute(source)) {
     return Error("`source` was a relative path");
@@ -57,6 +57,12 @@ inline Try<Nothing> copyfile(
   }
 
   return Nothing();
+}
+
+inline Try<Nothing> copyfile(
+    const std::string& source, const std::string& destination)
+{
+  return copyfile(wide_stringify(source), wide_stringify(destination));
 }
 
 } // namespace os {

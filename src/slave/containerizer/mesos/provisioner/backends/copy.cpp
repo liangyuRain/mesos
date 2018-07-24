@@ -35,6 +35,12 @@
 
 #include "slave/containerizer/mesos/provisioner/backends/copy.hpp"
 
+#ifdef __WINDOWS__
+#include <experimental/filesystem>
+namespace filesystem = std::experimental::filesystem;
+using std::wstring;
+#endif
+
 using namespace process;
 
 using std::string;
@@ -56,6 +62,15 @@ public:
 
 private:
   Future<Nothing> _provision(string layer, const string& rootfs);
+
+#ifdef __WINDOWS__
+  Future<Nothing> traverse(
+    const wstring& rootfs,
+    const wstring& layer,
+    vector<wstring>& whiteouts,
+    vector<wstring>& removePaths,
+    filesystem::path file);
+#endif
 };
 
 
@@ -301,14 +316,214 @@ Future<Nothing> CopyBackendProcess::_provision(
       return Nothing();
     });
 #else
-  return Failure(
-      "Provisioning a rootfs from an image is not supported on Windows");
+  filesystem::path layerPath(layer);
+  std::error_code code;
+  wstring ftsPath = layerPath.wstring();
+
+  filesystem::file_status status = filesystem::symlink_status(layerPath, code);
+  if (code || !filesystem::status_known(status)) {
+    return Failure("Failed to read '" + short_stringify(ftsPath) +
+                   "': (error_code " + std::to_string(code.value()) + ") " +
+                   code.message());
+  }
+
+  vector<wstring> removePaths;
+  vector<wstring> whiteouts;
+
+  LOG(INFO) << "begin traversal";
+
+  filesystem::directory_iterator iter(layerPath, code);
+  if (code) {
+    return Failure("Failed to read '" + short_stringify(ftsPath) +
+                   "': (error_code " + std::to_string(code.value()) + ") " +
+                   code.message());
+  }
+
+  LOG(INFO) << "iterator created";
+
+  for (const filesystem::directory_entry& entry : iter) {
+    Future<Nothing> future = traverse(::internal::windows::longpath(rootfs),
+                                      ::internal::windows::longpath(layer),
+                                      whiteouts,
+                                      removePaths,
+                                      entry.path());
+    if (future.isFailed()) {
+      return future;
+    }
+  }
+
+  LOG(INFO) << "finished traversal";
+
+  for (const wstring& p : removePaths) {
+    if (os::exists(p)) {
+      if (os::stat::isdir(short_stringify(p))) {
+        // It is OK to remove the entire directory labeled as opaque
+        // whiteout, since the same directory exists in this layer and
+        // will be copied back to rootfs.
+        Try<Nothing> rmdir = os::rmdir(short_stringify(p));
+        if (rmdir.isError()) {
+          return Failure(
+              "Failed to remove directory '" + short_stringify(p) + "': " +
+              rmdir.error());
+        }
+      } else {
+        Try<Nothing> rm = os::rm(p);
+        if (rm.isError()) {
+          return Failure(
+              "Failed to remove file '" + short_stringify(p) + "': " +
+              rm.error());
+        }
+      }
+    }
+  }
+
+  VLOG(1) << "Copying layer path '" << layer << "' to rootfs '" << rootfs
+          << "'";
+
+  filesystem::copy(layer, rootfs, code);
+  if (code) {
+    return Failure("Failed to copy layer: (error_code " +
+                   std::to_string(code.value()) + ") " + code.message());
+  }
+
+  foreach (const wstring whiteout, whiteouts) {
+    Try<Nothing> rm = os::rm(whiteout);
+    if (rm.isError()) {
+      return Failure(
+          "Failed to remove whiteout file '" + short_stringify(whiteout) +
+          "': " + rm.error());
+    }
+  }
+
+  return Nothing();
 #endif // __WINDOWS__
 }
 
 
+#ifdef __WINDOWS__
+Future<Nothing> CopyBackendProcess::traverse(
+    const wstring& rootfs,
+    const wstring& layer,
+    vector<wstring>& whiteouts,
+    vector<wstring>& removePaths,
+    filesystem::path file) {
+  LOG(INFO) << "0";
+
+  std::error_code code;
+  LOG(INFO) << file;
+  const wstring& ftsPath = file.wstring();
+
+  LOG(INFO) << "1";
+
+  filesystem::file_status status = filesystem::symlink_status(file, code);
+
+  LOG(INFO) << "1.5";
+
+  if (code || !filesystem::status_known(status)) {
+    return Failure("Failed to read '" + short_stringify(ftsPath) +
+                   "': (error_code " + std::to_string(code.value()) + ") " +
+                   code.message());
+  }
+
+  LOG(INFO) << "1.55";
+
+  LOG(INFO) << "ftsPath='" << short_stringify(ftsPath) << "' ; "
+            << "file.string()='" << short_stringify(layer) << "'";
+  wstring layerPath = ftsPath.substr(layer.length() + 1);
+  LOG(INFO) << "1.56";
+  wstring rootfsPath = path::join(rootfs, layerPath);
+  LOG(INFO) << "1.57";
+  Option<wstring> removePath;
+
+  LOG(INFO) << "2";
+
+  bool isRegular = filesystem::is_regular_file(file, code);
+  if (code) {
+    return Failure("Failed to read '" + short_stringify(ftsPath) +
+                   "': (error_code " + std::to_string(code.value()) + ") " +
+                   code.message());
+  }
+  if (isRegular && strings::startsWith(file.filename().wstring(),
+      wide_stringify(docker::spec::WHITEOUT_PREFIX))) {
+    WPath whiteout(layerPath);
+
+    whiteouts.push_back(rootfsPath);
+
+    if (file.filename() == 
+        short_stringify(docker::spec::WHITEOUT_OPAQUE_PREFIX)) {
+      removePath = path::join(rootfs, whiteout.dirname());
+    } else {
+      removePath = path::join(
+          rootfs,
+          whiteout.dirname(),
+          whiteout.basename().substr(strlen(docker::spec::WHITEOUT_PREFIX)));
+    }
+  }
+
+  LOG(INFO) << "3";
+
+  bool ftsIsDir = filesystem::is_directory(file, code);
+  if (os::exists(rootfsPath)) {
+    if (code) {
+      return Failure("Failed to read '" + short_stringify(ftsPath) +
+                     "': (error_code " + std::to_string(code.value()) + ") " +
+                     code.message());
+    }
+    if (os::stat::isdir(short_stringify(rootfsPath)) != ftsIsDir) {
+      removePath = rootfsPath;
+    } else if (os::stat::islink(short_stringify(rootfsPath))) {
+      removePath = rootfsPath;
+    }
+  }
+
+  LOG(INFO) << "4";
+
+  if (removePath.isSome()) {
+    removePaths.emplace_back(removePath.get());
+  }
+  
+
+  if (ftsIsDir) {
+    LOG(INFO) << "4.5";
+
+    filesystem::directory_iterator iter(file, code);
+
+    LOG(INFO) << "4.6";
+    if (code) {
+      return Failure("Failed to read '" + short_stringify(ftsPath) +
+                     "': (error_code " + std::to_string(code.value()) + ") " +
+                     code.message());
+    }
+    LOG(INFO) << "4.7: '" << file << "'";
+    for (const filesystem::directory_entry& entry : iter) {
+      LOG(INFO) << "4.8";
+      Future<Nothing> future = traverse(rootfs,
+                                        layer,
+                                        whiteouts,
+                                        removePaths,
+                                        entry.path());
+      if (future.isFailed()) {
+        return future;
+      }
+    }
+  }
+
+  LOG(INFO) << "5";
+
+  return Nothing();
+}
+#endif
+
+
 Future<bool> CopyBackendProcess::destroy(const string& rootfs)
 {
+#ifdef __WINDOWS__
+  Try<Nothing> rmdir = os::rmdir(rootfs);
+  if (rmdir.isError()) {
+    return Failure("Failed to destroy rootfs: " + rmdir.error());
+  }
+  return true;
+#else
   vector<string> argv{"rm", "-rf", rootfs};
 
   Try<Subprocess> s = subprocess(
@@ -333,6 +548,7 @@ Future<bool> CopyBackendProcess::destroy(const string& rootfs)
 
       return true;
     });
+#endif
 }
 
 } // namespace slave {

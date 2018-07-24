@@ -24,8 +24,10 @@
 namespace os {
 
 
-inline bool exists(const std::string& path)
+inline bool exists(const std::wstring& path)
 {
+  std::wstring longpath = ::internal::windows::longpath(path);
+
   // NOTE: `GetFileAttributes` returns `INVALID_FILE_ATTRIBUTES` if the file
   // could not be opened for any reason. Checking for one of two 'not found'
   // error codes (`ERROR_FILE_NOT_FOUND` or `ERROR_PATH_NOT_FOUND`) is a
@@ -33,8 +35,7 @@ inline bool exists(const std::string& path)
   // more information on this technique.
   //
   // [1] http://blogs.msdn.com/b/oldnewthing/archive/2007/10/23/5612082.aspx
-  const DWORD attributes = ::GetFileAttributesW(
-      ::internal::windows::longpath(path).data());
+  const DWORD attributes = ::GetFileAttributesW(longpath.data());
 
   if (attributes == INVALID_FILE_ATTRIBUTES) {
     const DWORD error = ::GetLastError();
@@ -49,6 +50,10 @@ inline bool exists(const std::string& path)
   return true;
 }
 
+inline bool exists(const std::string& path)
+{
+  return exists(wide_stringify(path));
+}
 
 // Determine if the process identified by pid exists.
 // NOTE: Zombie processes have a pid and therefore exist. See

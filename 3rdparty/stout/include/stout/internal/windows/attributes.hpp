@@ -25,12 +25,18 @@ namespace internal {
 namespace windows {
 
 inline Try<DWORD> get_file_attributes(const std::wstring& path) {
-  const DWORD attributes = ::GetFileAttributesW(path.data());
+  std::wstring longpath = ::internal::windows::longpath(path);
+  const DWORD attributes = ::GetFileAttributesW(longpath.data());
   if (attributes == INVALID_FILE_ATTRIBUTES) {
     return WindowsError(
-        "Failed to get attributes for file '" + short_stringify(path) + "'");
+        "Failed to get attributes for file '" + short_stringify(longpath) + "'");
   }
   return attributes;
+}
+
+inline Try<DWORD> get_file_attributes(const std::string& path)
+{
+  return get_file_attributes(wide_stringify(path));
 }
 
 } // namespace windows {

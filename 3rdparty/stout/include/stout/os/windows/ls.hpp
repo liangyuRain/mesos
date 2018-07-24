@@ -24,25 +24,25 @@
 
 namespace os {
 
-inline Try<std::list<std::string>> ls(const std::string& directory)
+inline Try<std::list<std::string>> ls(const std::wstring& directory)
 {
   // Ensure the path ends with a backslash.
-  std::string path = directory;
-  if (!strings::endsWith(path, "\\")) {
-    path += "\\";
+  std::wstring path = directory;
+  if (!strings::endsWith(path, L"\\")) {
+    path += L"\\";
   }
 
   // Get first file matching pattern `X:\path\to\wherever\*`.
   WIN32_FIND_DATAW found;
-  const std::wstring search_pattern =
-    ::internal::windows::longpath(path) + L"*";
+  const std::wstring search_pattern = path + L"*";
 
   const SharedHandle search_handle(
       ::FindFirstFileW(search_pattern.data(), &found),
       ::FindClose);
 
   if (search_handle.get() == INVALID_HANDLE_VALUE) {
-    return WindowsError("Failed to search '" + directory + "'");
+    return WindowsError("Failed to search '" +
+                        short_stringify(directory) + "'");
   }
 
   std::list<std::string> result;
@@ -64,6 +64,15 @@ inline Try<std::list<std::string>> ls(const std::string& directory)
   } while (::FindNextFileW(search_handle.get(), &found));
 
   return result;
+}
+
+inline Try<std::list<std::string>> ls(const std::string& directory)
+{
+  std::string path = directory;
+  if (!strings::endsWith(path, "\\")) {
+    path += "\\";
+  }
+  return ls(::internal::windows::longpath(path));
 }
 
 } // namespace os {

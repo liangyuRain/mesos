@@ -110,12 +110,18 @@ struct SymbolicLink
 // rather than a "normal" file or folder.
 inline Try<bool> reparse_point_attribute_set(const std::wstring& absolute_path)
 {
-  const Try<DWORD> attributes = get_file_attributes(absolute_path.data());
+  std::wstring longpath = ::internal::windows::longpath(absolute_path);
+  const Try<DWORD> attributes = get_file_attributes(longpath.data());
   if (attributes.isError()) {
     return Error(attributes.error());
   }
 
   return (attributes.get() & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+}
+
+inline Try<bool> reparse_point_attribute_set(const std::string& absolute_path)
+{
+  return reparse_point_attribute_set(wide_stringify(absolute_path));
 }
 
 
