@@ -39,13 +39,13 @@ namespace path {
 // For compatibility, lack of "file://" prefix is not considered an
 // error.
 template <typename T>
-inline auto from_uri(const T& uri) -> GET_TYPE(uri)
+inline auto from_uri(T&& uri) -> GET_TYPE(uri)
 {
   typedef GET_TYPE(uri) STRING;
 
   // Remove the optional "file://" if it exists.
   // TODO(coffler): Remove the `hostname` component.
-  const STRING path = strings::remove(uri,
+  const STRING path = strings::remove(std::forward<T>(uri),
       utf_convert<typename STRING::value_type>("file://"),
       strings::PREFIX);
 
@@ -62,35 +62,38 @@ inline auto from_uri(const T& uri) -> GET_TYPE(uri)
 // Base case.
 template <typename T1, typename T2>
 inline auto join(
-    const T1& path1,
-    const T2& path2,
+    T1&& path1,
+    T2&& path2,
     const char _separator) -> GET_TYPE(path1)
 {
   typedef GET_TYPE(path1) STRING;
   const STRING separator =
       utf_convert<typename STRING::value_type>(_separator);
-  return strings::remove(path1, separator, strings::SUFFIX) +
+  return strings::remove(std::forward<T1>(path1), separator, strings::SUFFIX) +
          separator +
-         strings::remove(path2, separator, strings::PREFIX);
+         strings::remove(std::forward<T2>(path2), separator, strings::PREFIX);
 }
 
 
 template <typename T1, typename T2>
 inline auto join(
-    const T1& path1,
-    const T2& path2) -> GET_TYPE(path1)
+    T1&& path1,
+    T2&& path2) -> GET_TYPE(path1)
 {
-  return join(path1, path2, os::PATH_SEPARATOR);
+  return join(std::forward<T1>(path1),
+      std::forward<T2>(path2),
+      os::PATH_SEPARATOR);
 }
 
 
 template <typename T1, typename T2, typename... Paths>
 inline auto join(
-    const T1& path1,
-    const T2& path2,
+    T1&& path1,
+    T2&& path2,
     Paths&&... paths) -> GET_TYPE(path1)
 {
-  return join(path1, join(path2, std::forward<Paths>(paths)...));
+  return join(std::forward<T1>(path1), 
+      join(std::forward<T2>(path2), std::forward<Paths>(paths)...));
 }
 
 
@@ -115,10 +118,10 @@ inline std::basic_string<T> join(
  * If an invalid path is given, the return result is also invalid.
  */
 template <typename T>
-inline bool absolute(const T& path)
+inline bool absolute(T&& path)
 {
   typedef GET_TYPE(path) STRING;
-  const STRING& path_str(stringify(path));
+  const STRING& path_str(stringify(std::forward<T>(path)));
 #ifndef __WINDOWS__
   return strings::startsWith(path_str,
       utf_convert<typename STRING::value_type>(os::PATH_SEPARATOR));
