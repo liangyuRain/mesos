@@ -37,35 +37,42 @@
 
 template <typename T>
 struct decide {
+  typedef typename 
+      std::remove_cv<typename std::remove_reference<T>::type>::type original;
   typedef typename std::conditional<
-      std::is_convertible<T, std::string>::value,
+      std::is_convertible<T, std::string>::value || 
+          std::is_same<original, char>::value,
       std::string,
       typename std::conditional<
-          std::is_convertible<T, std::wstring>::value,
+          std::is_convertible<T, std::wstring>::value ||
+              std::is_same<original, wchar_t>::value,
           std::wstring,
           std::string>::type>::type type;
 };
 
 
-template <bool DoCast, typename T1, typename T2>
+template <bool DoCast, typename T1>
 struct convert_type {
-  std::basic_string<T2> operator()(const T1& obj);
+  template <typename T2>
+  std::basic_string<T1> operator()(T2&& obj);
 };
 
 
-template <typename T1, typename T2>
-struct convert_type<true, T1, T2> {
-  std::basic_string<T2> operator()(const T1& obj) {
-    return (std::basic_string<T2>) obj;
+template <typename T1>
+struct convert_type<true, T1> {
+  template <typename T2>
+  std::basic_string<T1> operator()(T2&& obj) {
+    return std::forward<T2>(obj);
   }
 };
 
 
-template <typename T1, typename T2>
-struct convert_type<false, T1, T2> {
-  std::basic_string<T2> operator()(const T1& obj) {
-    std::basic_ostringstream<T2> stream;
-    stream << obj;
+template <typename T1>
+struct convert_type<false, T1> {
+  template <typename T2>
+  std::basic_string<T1> operator()(T2&& obj) {
+    std::basic_ostringstream<T1> stream;
+    stream << std::forward<T2>(obj);
     if (!stream.good()) {
       ABORT("Failed to stringify!");
     }
@@ -75,10 +82,10 @@ struct convert_type<false, T1, T2> {
 
 
 template <typename T>
-static inline auto stringify(const T& cstr) -> typename decide<T>::type {
+static inline auto stringify(const T& obj) -> typename decide<T>::type {
   typedef typename decide<T>::type STRING;
   typedef typename STRING::value_type CHAR;
-  return convert_type<std::is_convertible<T, STRING>::value, T, CHAR>()(cstr);
+  return convert_type<std::is_convertible<T, STRING>::value, CHAR>()(obj);
 }
 
 
@@ -90,15 +97,16 @@ static inline const std::basic_string<T>& stringify(
 
 
 template <typename T>
-static inline std::basic_string<T>&& stringify(
+static inline std::basic_string<T> stringify(
     std::basic_string<T>&& str) {
-  return std::forward<std::basic_string<T>>(str);
+  return std::move(str);
 }
 
 
 template <bool same, typename T1, typename T2>
 struct utf_convert_internal {
   std::basic_string<T1> operator()(const std::basic_string<T2>& str);
+  std::basic_string<T1> operator()(std::basic_string<T2>&& str);
 };
 
 
@@ -107,13 +115,25 @@ struct utf_convert_internal<true, T, T> {
   std::basic_string<T> operator()(const std::basic_string<T>& str) {
     return str;
   }
+
+  std::basic_string<T> operator()(std::basic_string<T>&& str) {
+    return std::move(str);
+  }
 };
 
 
 template <typename T1, typename T2>
 struct utf_convert_internal<false, T1, T2> {
-  std::basic_string<T1> operator()(const std::basic_string<T2>& str) {
+  std::basic_string<T1> func(const std::basic_string<T2>& str) {
     return std::basic_string<T1>(str.cbegin(), str.cend());
+  }
+
+  std::basic_string<T1> operator()(const std::basic_string<T2>& str) {
+    return func(str);
+  }
+
+  std::basic_string<T1> operator()(std::basic_string<T2>&& str) {
+    return func(str);
   }
 };
 
@@ -131,9 +151,15 @@ inline std::string short_stringify(const std::wstring& str)
 }
 
 
-inline std::string short_stringify(const std::string& str)
+inline const std::string& short_stringify(const std::string& str)
 {
   return str;
+}
+
+
+inline std::string short_stringify(std::string&& str)
+{
+  return std::move(str);
 }
 
 
@@ -149,9 +175,15 @@ inline std::wstring wide_stringify(const std::string& str)
 }
 
 
-inline std::wstring wide_stringify(const std::wstring& str)
+inline const std::wstring& wide_stringify(const std::wstring& str)
 {
   return str;
+}
+
+
+inline std::wstring wide_stringify(std::wstring&& str)
+{
+  return std::move(str);
 }
 
 
@@ -159,6 +191,10 @@ template <>
 struct utf_convert_internal<false, wchar_t, char> {
   std::basic_string<wchar_t> operator()(const std::basic_string<char>& str) {
     return wide_stringify(str);
+  }
+
+  std::basic_string<wchar_t> operator()(std::basic_string<char>&& str) {
+    return wide_stringify(std::move(str));
   }
 };
 
@@ -168,23 +204,25 @@ struct utf_convert_internal<false, char, wchar_t> {
   std::basic_string<char> operator()(const std::basic_string<wchar_t>& str) {
     return short_stringify(str);
   }
+
+  std::basic_string<char> operator()(std::basic_string<wchar_t>&& str) {
+    return short_stringify(std::move(str));
+  }
 };
 #endif // __WINDOWS__
 
 
 template <typename T1, typename T2>
-inline std::basic_string<T1> utf_convert(const T2& str) {
+inline std::basic_string<T1> utf_convert(T2&& str) {
   typedef GET_TYPE(str) STRING;
   typedef typename STRING::value_type CHAR;
-  const STRING& str_str(stringify(str));
   return utf_convert_internal<std::is_same<T1, CHAR>::value,
                               T1,
-                              CHAR>()(str_str);
+                              CHAR>()(stringify(std::forward<T2>(str)));
 }
 
 
-template <>
-inline std::string stringify<bool>(const bool& b)
+inline std::string stringify(const bool& b)
 {
   return b ? "true" : "false";
 }
@@ -300,8 +338,7 @@ std::string stringify(const hashmap<K, V>& map)
 // Consider the following overloads instead for better performance:
 //   const std::string& stringify(const Error&);
 //   std::string stringify(Error&&);
-template <>
-inline std::string stringify<Error>(const Error& error)
+inline std::string stringify(const Error& error)
 {
   return error.message;
 }
