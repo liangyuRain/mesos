@@ -30,9 +30,11 @@ namespace os {
 // resolve symlinks in the path, and succeed only if the target file exists.
 // This requires that the user has permissions to resolve each component of the
 // path.
-inline Result<std::string> realpath(const std::string& path)
+template <typename T>
+inline Result<std::string> realpath(T&& path)
 {
-  const Try<SharedHandle> handle = ::internal::windows::get_handle_follow(path);
+  const Try<SharedHandle> handle =
+      ::internal::windows::get_handle_follow(std::forward<T>(path));
   if (handle.isError()) {
     return Error(handle.error());
   }
@@ -44,8 +46,7 @@ inline Result<std::string> realpath(const std::string& path)
     return WindowsError("Failed to retrieve realpath buffer size");
   }
 
-  std::vector<wchar_t> buffer;
-  buffer.reserve(static_cast<size_t>(length));
+  std::vector<wchar_t> buffer(length);
 
   DWORD result = ::GetFinalPathNameByHandleW(
       handle.get().get_handle(), buffer.data(), length, FILE_NAME_NORMALIZED);
@@ -54,10 +55,10 @@ inline Result<std::string> realpath(const std::string& path)
     return WindowsError("Failed to determine realpath");
   }
 
-  return strings::remove(
-      short_stringify(std::wstring(buffer.data())),
-      os::LONGPATH_PREFIX,
-      strings::Mode::PREFIX);
+  return short_stringify(strings::remove(
+      buffer.data(),
+      os::W_LONGPATH_PREFIX,
+      strings::Mode::PREFIX));
 }
 
 } // namespace os {

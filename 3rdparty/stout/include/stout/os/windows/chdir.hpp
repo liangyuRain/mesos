@@ -25,9 +25,11 @@
 
 namespace os {
 
-inline Try<Nothing> chdir(const std::string& directory)
+template <typename T>
+inline Try<Nothing> chdir(T&& directory)
 {
-  std::wstring longpath = ::internal::windows::longpath(directory);
+  std::wstring longpath =
+      ::internal::windows::longpath(std::forward<T>(directory));
   if (::SetCurrentDirectoryW(longpath.data()) == 0) {
     return WindowsError();
   }
