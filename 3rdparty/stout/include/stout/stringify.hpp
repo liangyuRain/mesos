@@ -231,7 +231,7 @@ inline typename convert_decide<char, T&&>::type short_stringify(T&& str)
 
 
 template <typename T>
-inline typename convert_decide<wchar_t, T&&>::typ wide_stringify(T&& str)
+inline typename convert_decide<wchar_t, T&&>::type wide_stringify(T&& str)
 {
   return utf_convert<wchar_t>(std::forward<T>(str));
 }
