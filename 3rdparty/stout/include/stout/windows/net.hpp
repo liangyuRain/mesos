@@ -43,7 +43,7 @@ inline struct addrinfoW createAddrInfo(int socktype, int family, int flags)
 
 inline Error GaiError(int error)
 {
-  return Error(short_stringify(std::wstring(gai_strerrorW(error))));
+  return Error(short_stringify(gai_strerrorW(error)));
 }
 
 
@@ -107,7 +107,7 @@ inline Try<std::string> getHostname(const IP& ip)
     return GaiError(error);
   }
 
-  return short_stringify(std::wstring(hostname));
+  return short_stringify(hostname);
 }
 
 

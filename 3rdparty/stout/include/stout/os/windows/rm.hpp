@@ -35,28 +35,34 @@ namespace windows {
 // checking for the path's existence until there is a "file not found" error.
 // Until the file is actually deleted, this will loop on an access denied error
 // (the file exists but has been marked for deletion).
-inline Try<Nothing> wait_on_delete(const std::string& path)
+template <typename T>
+inline Try<Nothing> wait_on_delete(T&& path)
 {
-  // Try for 1 second in 10 intervals of 100 ms.
-  for (int i = 0; i < 10; ++i) {
-    // This should always fail if the file has been marked for deletion.
-    const DWORD attributes =
-      ::GetFileAttributesW(::internal::windows::longpath(path).data());
-    CHECK_EQ(attributes, INVALID_FILE_ATTRIBUTES);
-    const DWORD error = ::GetLastError();
+  {
+    const std::wstring& path(::internal::windows::longpath(std::forward<T>(path)));
+    // Try for 1 second in 10 intervals of 100 ms.
+    for (int i = 0; i < 10; ++i) {
+      // This should always fail if the file has been marked for deletion.
+      const DWORD attributes =
+        ::GetFileAttributesW(path.data());
+      CHECK_EQ(attributes, INVALID_FILE_ATTRIBUTES);
+      const DWORD error = ::GetLastError();
 
-    if (error == ERROR_ACCESS_DENIED) {
-      LOG(WARNING) << "Waiting for file " << path << " to be deleted";
-      os::sleep(Milliseconds(100));
-    } else if (error == ERROR_FILE_NOT_FOUND) {
-      // The file is truly gone, stop waiting.
-      return Nothing();
-    } else {
-      return WindowsError(error);
+      if (error == ERROR_ACCESS_DENIED) {
+        LOG(WARNING) << "Waiting for file " << short_stringify(path)
+                     << " to be deleted";
+        os::sleep(Milliseconds(100));
+      } else if (error == ERROR_FILE_NOT_FOUND) {
+        // The file is truly gone, stop waiting.
+        return Nothing();
+      } else {
+        return WindowsError(error);
+      }
     }
-  }
 
-  return Error("Timed out when waiting for file " + path + " to be deleted");
+    return Error("Timed out when waiting for file " +
+        short_stringify(path) + " to be deleted");
+  }
 }
 
 } // namespace windows {
@@ -64,7 +70,8 @@ inline Try<Nothing> wait_on_delete(const std::string& path)
 
 namespace os {
 
-inline Try<Nothing> rm(const std::string& path)
+template <typename T>
+inline Try<Nothing> rm(T&& path)
 {
   // This function uses either `RemoveDirectory` or `DeleteFile` to remove the
   // actual filesystem entry. These WinAPI functions are being used instead of
@@ -81,8 +88,9 @@ inline Try<Nothing> rm(const std::string& path)
   // [2] https://msdn.microsoft.com/en-us/library/windows/desktop/aa365682(v=vs.85).aspx#deletefile_and_deletefiletransacted
   // [3] http://pubs.opengroup.org/onlinepubs/009695399/functions/remove.html
   // [4] http://pubs.opengroup.org/onlinepubs/009695399/functions/rmdir.html
-  const std::wstring longpath = ::internal::windows::longpath(path);
-  const BOOL result = os::stat::isdir(path)
+  const std::wstring& longpath(
+      ::internal::windows::longpath(std::forward<T>(path)));
+  const BOOL result = os::stat::isdir(longpath)
       ? ::RemoveDirectoryW(longpath.data())
       : ::DeleteFileW(longpath.data());
 
@@ -95,7 +103,8 @@ inline Try<Nothing> rm(const std::string& path)
   // immediately fail with "directory not empty" if there still exists a marked
   // for deletion but not yet deleted file. By making waiting synchronously, we
   // gain the behavior of the POSIX API.
-  Try<Nothing> deleted = ::internal::windows::wait_on_delete(path);
+  Try<Nothing> deleted =
+      ::internal::windows::wait_on_delete(short_stringify(longpath));
   if (deleted.isError()) {
     return Error("wait_on_delete failed " + deleted.error());
   }

@@ -26,6 +26,8 @@
 namespace internal {
 namespace windows {
 
+const static size_t max_path_length = 248;
+
 // This function idempotently prepends "\\?\" to the given path iff:
 // (1) The path's length is greater than or equal to 248, the minimum Windows
 //     API limit. This limit is neither `NAME_MAX` nor `PATH_MAX`; it is an
@@ -35,22 +37,44 @@ namespace windows {
 //
 // It then converts the path to UTF-16, appropriate for use in Unicode versions
 // of Windows filesystem APIs which support lengths greater than NAME_MAX.
-inline std::wstring longpath(const std::string& path)
+inline std::wstring longpath_internal(const std::wstring& path)
 {
-  const size_t max_path_length = 248;
   if (path.size() >= max_path_length &&
-      path::absolute(path) &&
-      !strings::startsWith(path, os::LONGPATH_PREFIX)) {
-    return wide_stringify(os::LONGPATH_PREFIX + path);
+      !strings::startsWith(path, os::W_LONGPATH_PREFIX) &&
+      path::absolute(path)) {
+    return os::W_LONGPATH_PREFIX + path;
   } else {
-    return wide_stringify(path);
+    return path;
   }
 }
 
 
-inline std::wstring longpath(const std::wstring& path)
+inline std::wstring longpath_internal(std::wstring&& path)
 {
-  return longpath(short_stringify(path));
+  if (path.size() >= max_path_length &&
+      !strings::startsWith(path, os::W_LONGPATH_PREFIX) &&
+      path::absolute(path)) {
+    return os::W_LONGPATH_PREFIX + path;
+  } else {
+    return std::move(path);
+  }
+}
+
+
+inline std::wstring longpath_internal(const std::string& path)
+{
+  return longpath_internal(wide_stringify(path));
+}
+
+
+inline std::wstring longpath_internal(std::string&& path)
+{
+  return longpath_internal(wide_stringify(std::move(path)));
+}
+
+template <typename T>
+inline std::wstring longpath(T&& path) {
+  return longpath_internal(stringify(std::forward<T>(path)));
 }
 
 } // namespace windows {

@@ -48,9 +48,11 @@ namespace os {
 // NOTE: This function always opens files in non-overlapped mode, because
 // we only support overlapped pipes and sockets through the `os::pipe`
 // and `os::socket` functions.
-inline Try<int_fd> open(const std::string& path, int oflag, mode_t mode = 0)
+template <typename T>
+inline Try<int_fd> open(T&& path, int oflag, mode_t mode = 0)
 {
-  std::wstring longpath = ::internal::windows::longpath(path);
+  const std::wstring& longpath(
+      ::internal::windows::longpath(std::forward<T>(path)));
 
   // Map the POSIX `oflag` access flags.
 

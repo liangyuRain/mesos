@@ -27,30 +27,33 @@ namespace windows {
 
 // Get the full / absolute path. Does not check for existence, and does not
 // resolve symlinks.
-inline Result<std::string> fullpath(const std::string& path)
+template <typename T>
+inline Result<std::string> fullpath(T&& path)
 {
-  // First query for the buffer size required.
-  const DWORD length =
-    ::GetFullPathNameW(longpath(path).data(), 0, nullptr, nullptr);
+  {
+    const std::wstring& path(longpath(std::forward<T>(path)));
+    // First query for the buffer size required.
+    const DWORD length =
+        ::GetFullPathNameW(path.data(), 0, nullptr, nullptr);
 
-  if (length == 0) {
-    return WindowsError("Failed to retrieve fullpath buffer size");
+    if (length == 0) {
+      return WindowsError("Failed to retrieve fullpath buffer size");
+    }
+
+    std::vector<wchar_t> buffer(length);
+
+    const DWORD result =
+        ::GetFullPathNameW(path.data(), length, buffer.data(), nullptr);
+
+    if (result == 0) {
+      return WindowsError("Failed to determine fullpath");
+    }
+
+    return short_stringify(strings::remove(
+        buffer.data(),
+        os::W_LONGPATH_PREFIX,
+        strings::Mode::PREFIX));
   }
-
-  std::vector<wchar_t> buffer;
-  buffer.reserve(static_cast<size_t>(length));
-
-  const DWORD result =
-    ::GetFullPathNameW(longpath(path).data(), length, buffer.data(), nullptr);
-
-  if (result == 0) {
-    return WindowsError("Failed to determine fullpath");
-  }
-
-  return strings::remove(
-      short_stringify(std::wstring(buffer.data())),
-      os::LONGPATH_PREFIX,
-      strings::Mode::PREFIX);
 }
 
 
@@ -76,10 +79,11 @@ inline Result<std::string> fullpath(const std::string& path)
 // NOTE: it may be helpful to consult the documentation for each of these
 // functions, as they give you sources that justify the arguments to the
 // obscure APIs we call to get this all working.
-inline Try<SymbolicLink> query_symbolic_link_data(const std::string& path)
+template <typename T>
+inline Try<SymbolicLink> query_symbolic_link_data(T&& path)
 {
   // Convert to absolute path because Windows APIs expect it.
-  const Result<std::string> absolute_path = fullpath(path);
+  const Result<std::string> absolute_path = fullpath(std::forward<T>(path));
   if (!absolute_path.isSome()) {
     return Error(absolute_path.error());
   }
