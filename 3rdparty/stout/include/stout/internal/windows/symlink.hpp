@@ -40,8 +40,7 @@ inline Result<std::string> fullpath(T&& path)
       return WindowsError("Failed to retrieve fullpath buffer size");
     }
 
-    std::vector<wchar_t> buffer;
-    buffer.reserve(static_cast<size_t>(length));
+    std::vector<wchar_t> buffer(length);
 
     const DWORD result =
         ::GetFullPathNameW(path.data(), length, buffer.data(), nullptr);
@@ -50,10 +49,10 @@ inline Result<std::string> fullpath(T&& path)
       return WindowsError("Failed to determine fullpath");
     }
 
-    return strings::remove(
-        short_stringify(std::wstring(buffer.data())),
-        os::LONGPATH_PREFIX,
-        strings::Mode::PREFIX);
+    return short_stringify(strings::remove(
+        buffer.data(),
+        os::W_LONGPATH_PREFIX,
+        strings::Mode::PREFIX));
   }
 }
 

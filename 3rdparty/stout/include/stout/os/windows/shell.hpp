@@ -444,7 +444,7 @@ Try<std::string> shell(const std::string& fmt, const T&... t)
     }
 
     for (int i = 0; i < argc; ++i) {
-      args.push_back(short_stringify(std::wstring(argv.get()[i])));
+      args.push_back(short_stringify(argv.get()[i]));
     }
   }
 
