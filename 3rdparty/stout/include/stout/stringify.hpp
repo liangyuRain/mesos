@@ -93,8 +93,11 @@ struct convert_type<false, T1> {
 //
 // For performance consideration, if the type passed in is already in
 // `std::basic_string` type, `stringify` will not create any new copy of it.
+// If the passed in is a lvalue, the return type will be a const reference to
+// that lvalue `const std::basic_string &`. If the passed in is a rvalue, the
+// return type will be "move" constructed `std::basic_string`.
 template <typename T>
-static inline auto stringify(const T& obj) -> typename decide<T>::type {
+inline typename decide<T>::type stringify(const T& obj) {
   typedef typename decide<T>::type STRING;
   typedef typename STRING::value_type CHAR;
   return convert_type<std::is_convertible<T, STRING>::value, CHAR>()(obj);
@@ -102,143 +105,135 @@ static inline auto stringify(const T& obj) -> typename decide<T>::type {
 
 
 template <typename T>
-static inline const std::basic_string<T>& stringify(
+inline const std::basic_string<T>& stringify(
+    std::basic_string<T>& str) {
+  return str;
+}
+
+
+template <typename T>
+inline const std::basic_string<T>& stringify(
     const std::basic_string<T>& str) {
   return str;
 }
 
 
 template <typename T>
-static inline std::basic_string<T> stringify(
+inline std::basic_string<T> stringify(
     std::basic_string<T>&& str) {
   return std::move(str);
 }
 
 
-template <bool same, typename T1, typename T2>
-struct utf_convert_internal {
-  std::basic_string<T1> operator()(const std::basic_string<T2>& str);
-  std::basic_string<T1> operator()(std::basic_string<T2>&& str);
-};
-
-
-template <typename T>
-struct utf_convert_internal<true, T, T> {
-  std::basic_string<T> operator()(const std::basic_string<T>& str) {
-    return str;
-  }
-
-  std::basic_string<T> operator()(std::basic_string<T>&& str) {
-    return std::move(str);
-  }
-};
-
-
 template <typename T1, typename T2>
-struct utf_convert_internal<false, T1, T2> {
-  std::basic_string<T1> func(const std::basic_string<T2>& str) {
-    return std::basic_string<T1>(str.cbegin(), str.cend());
-  }
-
+struct utf_convert__ {
   std::basic_string<T1> operator()(const std::basic_string<T2>& str) {
-    return func(str);
-  }
-
-  std::basic_string<T1> operator()(std::basic_string<T2>&& str) {
-    return func(str);
+    return std::basic_string<T1>(str.cbegin(), str.cend());
   }
 };
 
 
 #ifdef __WINDOWS__
-inline std::string short_stringify(const std::wstring& str)
-{
-  // Convert UTF-16 `wstring` to UTF-8 `string`.
-  static std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>
-    converter(
-        "UTF-16 to UTF-8 conversion failed",
-        L"UTF-16 to UTF-8 conversion failed");
-
-  return converter.to_bytes(str);
-}
-
-
-inline const std::string& short_stringify(const std::string& str)
-{
-  return str;
-}
-
-
-inline std::string short_stringify(std::string&& str)
-{
-  return std::move(str);
-}
-
-
-inline std::wstring wide_stringify(const std::string& str)
-{
-  // Convert UTF-8 `string` to UTF-16 `wstring`.
-  static std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>
-    converter(
-        "UTF-8 to UTF-16 conversion failed",
-        L"UTF-8 to UTF-16 conversion failed");
-
-  return converter.from_bytes(str);
-}
-
-
-inline const std::wstring& wide_stringify(const std::wstring& str)
-{
-  return str;
-}
-
-
-inline std::wstring wide_stringify(std::wstring&& str)
-{
-  return std::move(str);
-}
-
-
 template <>
-struct utf_convert_internal<false, wchar_t, char> {
+struct utf_convert__<wchar_t, char> {
   std::basic_string<wchar_t> operator()(const std::basic_string<char>& str) {
-    return wide_stringify(str);
-  }
+    // Convert UTF-8 `string` to UTF-16 `wstring`.
+    static std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>
+      converter(
+          "UTF-8 to UTF-16 conversion failed",
+          L"UTF-8 to UTF-16 conversion failed");
 
-  std::basic_string<wchar_t> operator()(std::basic_string<char>&& str) {
-    return wide_stringify(std::move(str));
+    return converter.from_bytes(str);
   }
 };
 
 
 template <>
-struct utf_convert_internal<false, char, wchar_t> {
+struct utf_convert__<char, wchar_t> {
   std::basic_string<char> operator()(const std::basic_string<wchar_t>& str) {
-    return short_stringify(str);
-  }
+    // Convert UTF-16 `wstring` to UTF-8 `string`.
+    static std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>
+      converter(
+          "UTF-16 to UTF-8 conversion failed",
+          L"UTF-16 to UTF-8 conversion failed");
 
-  std::basic_string<char> operator()(std::basic_string<wchar_t>&& str) {
-    return short_stringify(std::move(str));
+    return converter.to_bytes(str);
   }
 };
 #endif // __WINDOWS__
 
 
+template <typename T1, typename T2>
+struct convert_decide {
+  typedef typename std::conditional<
+      std::is_same<T2, std::basic_string<T1>&>::value ||
+          std::is_same<T2, const std::basic_string<T1>&>::value,
+      const std::basic_string<T1>&,
+      std::basic_string<T1>>::type type;
+};
+
+
+template <typename T1, typename T2>
+struct utf_convert_ {
+  inline typename convert_decide<T1, T2&&>::type operator()(T2&& str) {
+    typedef GET_TYPE(str) STRING;
+    typedef typename STRING::value_type CHAR;
+    return utf_convert__<T1, CHAR>()(stringify(std::forward<T2>(str)));
+  }
+};
+
+
+template <typename T>
+struct utf_convert_<T, const std::basic_string<T>&> {
+  inline const std::basic_string<T>& operator()(
+      const std::basic_string<T>& str) {
+    return str;
+  }
+};
+
+
+template <typename T>
+struct utf_convert_<T, std::basic_string<T>&> {
+  inline const std::basic_string<T>& operator()(
+      std::basic_string<T>& str) {
+    return str;
+  }
+};
+
+
+template <typename T>
+struct utf_convert_<T, std::basic_string<T>&&> {
+  inline std::basic_string<T> operator()(
+      std::basic_string<T>&& str) {
+    return std::move(str);
+  }
+};
+
+
 // `utf_convert` can accept any argument `stringify` accept, and it can also
 // change the UTF encoding by providing a single template parameter. For
-// example, to convert a C `char*` string to wide string: 
+// example, to convert a C `char*` string to wide string:
 //
 //   std::wstring wstr = utf_convert<wchar_t>(cstr);
 //
-// Unlike `stringify`, `utf_convert` always create a new copy, even if the
-// string passed in is already in the desired UTF encoding.
+// Like `stringify`, `utf_convert` is also designed to avoid copy as possible.
 template <typename T1, typename T2>
-inline std::basic_string<T1> utf_convert(T2&& str) {
-  typedef GET_TYPE(str) STRING;
-  typedef typename STRING::value_type CHAR;
-  return utf_convert_internal<std::is_same<T1, CHAR>::value,
-                              T1,
-                              CHAR>()(stringify(std::forward<T2>(str)));
+inline typename convert_decide<T1, T2&&>::type utf_convert(T2&& str) {
+  return utf_convert_<T1, T2&&>()(std::forward<T2>(str));
+};
+
+
+template <typename T>
+inline typename convert_decide<char, T&&>::type short_stringify(T&& str)
+{
+  return utf_convert<char>(std::forward<T>(str));
+}
+
+
+template <typename T>
+inline typename convert_decide<wchar_t, T&&>::typ wide_stringify(T&& str)
+{
+  return utf_convert<wchar_t>(std::forward<T>(str));
 }
 
 
