@@ -27,9 +27,10 @@ namespace os {
 // Looks in the environment variables for the specified key and
 // returns a string representation of its value. If no environment
 // variable matching key is found, None() is returned.
-inline Option<std::string> getenv(const std::string& key)
+template <typename T>
+inline Option<std::string> getenv(T&& key)
 {
-  std::wstring wide_key = wide_stringify(key);
+  std::wstring wide_key = wide_stringify(std::forward<T>(key));
 
   // NOTE: The double-call to `::GetEnvironmentVariable` here uses the first
   // call to get the size of the variable's value, and then again to retrieve
@@ -46,8 +47,7 @@ inline Option<std::string> getenv(const std::string& key)
     return "";
   }
 
-  std::vector<wchar_t> environment;
-  environment.reserve(static_cast<size_t>(buffer_size));
+  std::vector<wchar_t> environment(buffer_size);
 
   DWORD value_size =
     ::GetEnvironmentVariableW(wide_key.data(), environment.data(), buffer_size);
@@ -62,7 +62,7 @@ inline Option<std::string> getenv(const std::string& key)
     return "";
   }
 
-  return short_stringify(std::wstring(environment.data()));
+  return short_stringify(environment.data());
 }
 
 } // namespace os {

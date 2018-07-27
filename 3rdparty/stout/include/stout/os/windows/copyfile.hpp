@@ -35,28 +35,34 @@ namespace os {
 //
 // NOLINT(whitespace/line_length)
 
-inline Try<Nothing> copyfile(
-    const std::string& source, const std::string& destination)
+template <typename T1, typename T2>
+inline Try<Nothing> copyfile(T1&& source, T2&& destination)
 {
-  if (!path::absolute(source)) {
-    return Error("`source` was a relative path");
-  }
+  {
+    const std::wstring& source(
+        ::internal::windows::longpath(std::forward<T1>(source)));
+    const std::wstring& destination(
+        ::internal::windows::longpath(std::forward<T2>(destination)));
+    if (!path::absolute(source)) {
+      return Error("`source` was a relative path");
+    }
 
-  if (!path::absolute(destination)) {
-    return Error("`destination` was a relative path");
-  }
+    if (!path::absolute(destination)) {
+      return Error("`destination` was a relative path");
+    }
 
-  if (!::CopyFileW(
-          ::internal::windows::longpath(source).data(),
-          ::internal::windows::longpath(destination).data(),
-          // NOTE: This allows the destination to be overwritten if the
-          // destination already exists, as is the case in the POSIX version of
-          // `copyfile`.
-          false)) {
-    return WindowsError();
-  }
+    if (!::CopyFileW(
+            source.data(),
+            destination.data(),
+            // NOTE: This allows the destination to be overwritten if the
+            // destination already exists, as is the case in the POSIX version of
+            // `copyfile`.
+            false)) {
+      return WindowsError();
+    }
 
-  return Nothing();
+    return Nothing();
+  }
 }
 
 } // namespace os {
