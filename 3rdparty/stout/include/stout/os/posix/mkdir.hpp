@@ -36,7 +36,7 @@ inline Try<Nothing> mkdir(const std::string& directory, bool recursive = true)
     }
   } else {
     std::vector<std::string> tokens =
-      strings::tokenize(directory, os::PATH_SEPARATOR);
+      strings::tokenize(directory, stringify(os::PATH_SEPARATOR));
 
     std::string path;
 

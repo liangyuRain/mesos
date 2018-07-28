@@ -23,12 +23,10 @@
 
 namespace os {
 
-template <typename T>
-inline bool exists(T&& path)
+inline bool exists(const std::wstring& path)
 {
   {
-    const std::wstring& path(
-        ::internal::windows::longpath(std::forward<T>(path)));
+    const std::wstring& path(::internal::windows::longpath(path));
 
     // NOTE: `GetFileAttributes` returns `INVALID_FILE_ATTRIBUTES` if the file
     // could not be opened for any reason. Checking for one of two 'not found'
@@ -51,6 +49,12 @@ inline bool exists(T&& path)
 
     return true;
   }
+}
+
+
+inline bool exists(const std::string& path)
+{
+  return exists(::internal::windows::longpath(path));
 }
 
 

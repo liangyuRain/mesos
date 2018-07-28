@@ -43,13 +43,12 @@ inline bool islink(T&& path)
 }
 
 
-template <typename T>
 inline bool isdir(
-    T&& path,
+    const std::wstring& path,
     const FollowSymlink follow = FollowSymlink::FOLLOW_SYMLINK)
 {
   {
-    const std::wstring& path(::internal::windows::longpath(std::forward<T>(path)));
+    const std::wstring& path(::internal::windows::longpath(path));
     // A symlink itself is not a directory.
     // If it's not a link, we ignore `follow`.
     if (follow == FollowSymlink::DO_NOT_FOLLOW_SYMLINK && islink(path)) {
@@ -64,6 +63,14 @@ inline bool isdir(
 
     return attributes.get() & FILE_ATTRIBUTE_DIRECTORY;
   }
+}
+
+
+inline bool isdir(
+    const std::string& path,
+    const FollowSymlink follow = FollowSymlink::FOLLOW_SYMLINK)
+{
+  return isdir(::internal::windows::longpath(path));
 }
 
 
@@ -114,13 +121,12 @@ inline bool isfile(
 // Returns the size in Bytes of a given file system entry. When applied to a
 // symbolic link with `follow` set to `DO_NOT_FOLLOW_SYMLINK`, this will return
 // zero because that's what Windows says.
-template <typename T>
 inline Try<Bytes> size(
-    T&& path,
+    const std::wstring& path,
     const FollowSymlink follow = FollowSymlink::FOLLOW_SYMLINK)
 {
   {
-    const std::wstring& path(::internal::windows::longpath(std::forward<T>(path)));
+    const std::wstring& path(::internal::windows::longpath(path));
     const Try<SharedHandle> handle = (follow == FollowSymlink::FOLLOW_SYMLINK)
       ? ::internal::windows::get_handle_follow(path)
       : ::internal::windows::get_handle_no_follow(path);
@@ -136,6 +142,14 @@ inline Try<Bytes> size(
 
     return Bytes(file_size.QuadPart);
   }
+}
+
+
+inline Try<Bytes> size(
+    const std::string& path,
+    const FollowSymlink follow = FollowSymlink::FOLLOW_SYMLINK)
+{
+  return size(::internal::windows::longpath(path));
 }
 
 

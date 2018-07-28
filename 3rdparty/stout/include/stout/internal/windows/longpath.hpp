@@ -40,8 +40,8 @@ const static size_t max_path_length = 248;
 inline std::wstring longpath_internal(const std::wstring& path)
 {
   if (path.size() >= max_path_length &&
-      path::absolute(path) &&
-      !strings::startsWith(path, os::W_LONGPATH_PREFIX)) {
+      !strings::startsWith(path, os::W_LONGPATH_PREFIX) &&
+      path::absolute(path)) {
     return os::W_LONGPATH_PREFIX + path;
   } else {
     return path;
@@ -52,8 +52,8 @@ inline std::wstring longpath_internal(const std::wstring& path)
 inline std::wstring longpath_internal(std::wstring&& path)
 {
   if (path.size() >= max_path_length &&
-      path::absolute(path) &&
-      !strings::startsWith(path, os::W_LONGPATH_PREFIX)) {
+      !strings::startsWith(path, os::W_LONGPATH_PREFIX) &&
+      path::absolute(path)) {
     return os::W_LONGPATH_PREFIX + path;
   } else {
     return std::move(path);
