@@ -80,7 +80,7 @@ Try<Owned<Fetcher>> create(const Option<Flags>& _flags)
 
 Future<Nothing> Fetcher::Plugin::fetch(
     const URI& uri,
-    shared_ptr<vector<string>> urls,
+    const vector<string>& urls,
     const string& directory,
     const Option<string>& data) const
 {
@@ -126,7 +126,7 @@ Future<Nothing> Fetcher::fetch(
 
 Future<Nothing> Fetcher::fetch(
     const URI& uri,
-    shared_ptr<vector<string>> urls,
+    const vector<string>& urls,
     const string& directory,
     const Option<string>& data) const
 {

@@ -60,7 +60,7 @@ public:
 
   virtual process::Future<Nothing> fetch(
       const URI& uri,
-      std::shared_ptr<std::vector<std::string>> urls,
+      const std::vector<std::string>& urls,
       const std::string& directory,
       const Option<std::string>& data = None()) const;
 

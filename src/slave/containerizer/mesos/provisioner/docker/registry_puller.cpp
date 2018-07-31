@@ -503,7 +503,7 @@ Future<hashset<string>> RegistryPullerProcess::fetchBlobs(
     blobSums.insert(blobSum);
   }
 
-  hashmap<string, shared_ptr<vector<string>>> urls;
+  hashmap<string, vector<string>> urls;
   bool use_s2 = false;
 
   Try<string> _manifest_s2 = os::read(path::join(directory, "manifest_v2s2"));
@@ -526,11 +526,10 @@ Future<hashset<string>> RegistryPullerProcess::fetchBlobs(
 
     for (int i = 0; i < manifest_s2->layers_size(); i++) {
       string blobSum = manifest_s2->layers(i).digest();
-      urls.emplace(blobSum, shared_ptr<vector<string>>(new vector<string>));
-      auto vec = urls.find(blobSum);
+      vector<string>& vec = urls[blobSum];
       for (int j = 0; j < manifest_s2->layers(i).urls_size(); ++j) {
         string url = manifest_s2->layers(i).urls(j);
-        vec->second->emplace_back(url);
+        vec.emplace_back(url);
       }
     }
 
@@ -585,11 +584,11 @@ succeed:
           port);
     }
 
-    Option<shared_ptr<vector<string>>> vec = urls.get(blobSum);
-    if (use_s2 && vec.isSome()) {
+    auto vec = urls.find(blobSum);
+    if (use_s2 && vec != urls.end()) {
     futures.push_back(fetcher->fetch(
         blobUri,
-        vec.get(),
+        vec->second,
         directory,
         config.isSome() ? config->data() : Option<string>()));
     } else {

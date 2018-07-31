@@ -15,7 +15,6 @@
 // limitations under the License.
 
 #include <string>
-#include <memory>
 #include <tuple>
 #include <vector>
 
@@ -53,7 +52,6 @@ using std::set;
 using std::string;
 using std::tuple;
 using std::vector;
-using std::shared_ptr;
 
 using process::dispatch;
 using process::spawn;
@@ -431,7 +429,7 @@ public:
 
   Future<Nothing> fetch(
     const URI& uri,
-    shared_ptr<vector<string>> urls,
+    vector<string> urls,
     const string& directory,
     const Option<string>& data);
 
@@ -473,13 +471,13 @@ private:
 
   Future<Nothing> fetchBlob(
       const URI& blobUri,
-      shared_ptr<vector<string>> urls,
+      const vector<string>& urls,
       const string& directory,
       const http::Headers& authHeaders);
 
   Future<Nothing> _fetchBlob(
       const URI& blobUri,
-      shared_ptr<vector<string>> urls,
+      const vector<string>& urls,
       const string& directory,
       const string& blobUrl,
       const http::Headers& basicAuthHeaders);
@@ -487,7 +485,7 @@ private:
   Future<Nothing> onFetchBlobFailure(
       const Future<Nothing> f,
       const URI& blobUri,
-      shared_ptr<vector<string>> urls,
+      vector<string> urls,
       const string& directory,
       const http::Headers& authHeaders);
 
@@ -597,7 +595,7 @@ Future<Nothing> DockerFetcherPlugin::fetch(
 
 Future<Nothing> DockerFetcherPlugin::fetch(
     const URI& uri,
-    shared_ptr<vector<string>> urls,
+    const vector<string>& urls,
     const string& directory,
     const Option<string>& data) const
 {
@@ -615,13 +613,12 @@ Future<Nothing> DockerFetcherPluginProcess::fetch(
     const string& directory,
     const Option<string>& data)
 {
-  shared_ptr<vector<string>> urls(new vector<string>);
-  return fetch(uri, urls, directory, data);
+  return fetch(uri, vector<string>(), directory, data);
 }
 
 Future<Nothing> DockerFetcherPluginProcess::fetch(
     const URI& uri,
-    shared_ptr<vector<string>> urls,
+    vector<string> urls,
     const string& directory,
     const Option<string>& data)
 {
@@ -670,7 +667,7 @@ Future<Nothing> DockerFetcherPluginProcess::fetch(
   http::Headers basicAuthHeaders = getAuthHeaderBasic(uri, _auths);
 
   if (uri.scheme() == "docker-blob") {
-    urls->emplace_back(strings::trim(stringify(getBlobUri(uri))));
+    urls.emplace_back(strings::trim(stringify(getBlobUri(uri))));
     return fetchBlob(getBlobUri(uri), urls, directory, basicAuthHeaders);
   }
 
@@ -896,12 +893,12 @@ Future<Nothing> DockerFetcherPluginProcess::___fetch(
               ? Option<int>(uri.port())
               : None()));
 
-        shared_ptr<vector<string>> urls(new vector<string>);
+        vector<string> urls;
         URI blobUri = getBlobUri(blob);
-        urls->emplace_back(strings::trim(stringify(blobUri)));
+        urls.emplace_back(strings::trim(stringify(blobUri)));
         for (int j = 0; j < s2_manifest.layers(i).urls_size(); ++j) {
           string url = s2_manifest.layers(i).urls(j);
-          urls->emplace_back(url);
+          urls.emplace_back(url);
         }
 
         // Use the same 'authHeaders' as for the manifest to pull the blobs.
@@ -928,18 +925,18 @@ Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
     const http::Headers& authHeaders)
 {
   URI blobUri = getBlobUri(uri);
-  shared_ptr<vector<string>> urls(new vector<string>);
-  urls->emplace_back(strings::trim(stringify(blobUri)));
+  vector<string> urls;
+  urls.emplace_back(strings::trim(stringify(blobUri)));
   return fetchBlob(blobUri, urls, directory, authHeaders);
 }
 
 Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
     const URI& blobUri,
-    shared_ptr<vector<string>> urls,
+    const vector<string>& urls,
     const string& directory,
     const http::Headers& authHeaders)
 {
-  string blobUrl = urls->back();
+  string blobUrl = urls.back();
 
   return download(blobUri, blobUrl, directory, authHeaders, stallTimeout)
     .then(defer(self(), [=](int code) -> Future<Nothing> {
@@ -965,7 +962,7 @@ Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
 
 Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
     const URI& blobUri,
-    shared_ptr<vector<string>> urls,
+    const vector<string>& urls,
     const string& directory,
     const string& blobUrl,
     const http::Headers& basicAuthHeaders)
@@ -1009,12 +1006,12 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
 Future<Nothing> DockerFetcherPluginProcess::onFetchBlobFailure(
   const Future<Nothing> f,
   const URI& blobUri,
-  shared_ptr<vector<string>> urls,
+  vector<string> urls,
   const string& directory,
   const http::Headers& authHeaders)
 {
-  urls->pop_back();
-  if (!urls->empty()) {
+  urls.pop_back();
+  if (!urls.empty()) {
     return fetchBlob(blobUri, urls, directory, authHeaders);
   } else {
     return Failure(f.failure());
