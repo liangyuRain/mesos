@@ -183,12 +183,7 @@ Future<Nothing> wclayer_import(
 
   if (!layers.empty()) {
     argv.emplace_back("-l");
-    argv.emplace_back();
-    string sep(",");
-    for (const Path& p : layers) {
-      argv.back() += string(p) + sep;
-    }
-    argv.back().erase(argv.back().size() - sep.size());
+    argv.emplace_back(strings::join(",", layers));
   }
 
   argv.emplace_back(directory);
