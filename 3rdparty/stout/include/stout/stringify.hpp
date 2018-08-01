@@ -33,15 +33,15 @@
 #include "hashmap.hpp"
 #include "set.hpp"
 
-#define GET_TYPE(X) typename decide<decltype(X)>::type
+#define GET_TYPE(X) typename decide_string<decltype(X)>::type
 
 // Any type that is convertible to `std::string` including `char` will be
-// `decide` to be `std::string` after stringify. Any type that cannot fall into
+// `decide_string` to be `std::string`. Any type that cannot fall into
 // the first category but is convertible to `std::wstring` including `wchar_t`
-// will be `decide` to be `std::wstring`. Any type cannot fall into these two
-// catefories will be `decide` to be `std::string`.
+// will be `decide_string` to be `std::wstring`. Any type cannot fall into these two
+// categories will be `decide_string` to be `std::string`.
 template <typename T>
-struct decide {
+struct decide_string {
   typedef typename
       std::remove_cv<typename std::remove_reference<T>::type>::type original;
   typedef typename std::conditional<
@@ -97,8 +97,8 @@ struct convert_type<false, T1> {
 // that lvalue `const std::basic_string &`. If the passed in is a rvalue, the
 // return type will be "move" constructed `std::basic_string`.
 template <typename T>
-inline typename decide<T>::type stringify(const T& obj) {
-  typedef typename decide<T>::type STRING;
+inline typename decide_string<T>::type stringify(const T& obj) {
+  typedef typename decide_string<T>::type STRING;
   typedef typename STRING::value_type CHAR;
   return convert_type<std::is_convertible<T, STRING>::value, CHAR>()(obj);
 }

@@ -25,7 +25,7 @@
 #include "option.hpp"
 #include "stringify.hpp"
 
-#define GET_TYPE(X) typename decide<decltype(X)>::type
+#define GET_TYPE(X) typename decide_string<decltype(X)>::type
 
 namespace strings {
 
