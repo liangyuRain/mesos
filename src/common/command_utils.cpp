@@ -169,6 +169,33 @@ Future<Nothing> untar(
 }
 
 
+#ifdef __WINDOWS__
+Future<Nothing> wclayer_import(
+    const Path& input, const vector<Path>& layers, const Path& directory)
+{
+  vector<string> argv = {"wclayer", "import", "-i", input};
+
+  if (!layers.empty()) {
+    for (Path p : layers) {
+      argv.emplace_back("-l");
+      argv.emplace_back(p);
+    }
+  }
+
+  argv.emplace_back(directory);
+  return launch("wclayer", argv).then([]() { return Nothing(); });
+}
+
+
+Future<Nothing> wclayer_remove(const Path& directory)
+{
+  vector<string> argv = {"wclayer", "remove", directory};
+
+  return launch("wclayer", argv).then([]() { return Nothing(); });
+}
+#endif // __WINDOWS__
+
+
 Future<string> sha512(const Path& input)
 {
 #ifdef __linux__
