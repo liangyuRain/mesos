@@ -25,8 +25,6 @@
 #include "option.hpp"
 #include "stringify.hpp"
 
-#define GET_TYPE(X) typename decide_string<decltype(X)>::type
-
 namespace strings {
 
 const std::string WHITESPACE = " \t\n\r";
@@ -43,12 +41,12 @@ enum Mode
 // as all the parameters and return value are in the same UTF encoding.
 
 template <typename T1, typename T2>
-inline auto remove(
+inline GET_TYPE(T1) remove(
     T1&& from,
     T2&& substring,
-    Mode mode = ANY) -> GET_TYPE(from)
+    Mode mode = ANY)
 {
-  typedef GET_TYPE(from) STRING;
+  typedef GET_TYPE(T1) STRING;
   const STRING& from_str(stringify(std::forward<T1>(from))),
       substring_str(stringify(std::forward<T2>(substring)));
 
@@ -75,12 +73,12 @@ inline auto remove(
 
 
 template <typename T1, typename T2>
-inline auto trim(
+inline GET_TYPE(T1) trim(
     T1&& from,
     Mode mode,
-    T2&& chars) -> GET_TYPE(from)
+    T2&& chars)
 {
-  typedef GET_TYPE(from) STRING;
+  typedef GET_TYPE(T1) STRING;
   const STRING& from_str(stringify(std::forward<T1>(from))),
       chars_str(stringify(std::forward<T2>(chars)));
 
@@ -115,9 +113,9 @@ inline auto trim(
 
 
 template <typename T>
-inline auto trim(T&& from, Mode mode = ANY) -> GET_TYPE(from)
+inline GET_TYPE(T) trim(T&& from, Mode mode = ANY)
 {
-  typedef GET_TYPE(from) STRING;
+  typedef GET_TYPE(T) STRING;
   return trim(std::forward<T>(from), mode,
       utf_convert<typename STRING::value_type>(WHITESPACE));
 }
@@ -126,7 +124,7 @@ inline auto trim(T&& from, Mode mode = ANY) -> GET_TYPE(from)
 // Helper providing some syntactic sugar for when 'mode' is ANY but
 // the 'chars' are specified.
 template <typename T1, typename T2>
-inline auto trim(T1&& from, T2&& chars) -> GET_TYPE(from)
+inline GET_TYPE(T1) trim(T1&& from, T2&& chars)
 {
   return trim(std::forward<T1>(from), ANY, std::forward<T2>(chars));
 }
@@ -134,9 +132,9 @@ inline auto trim(T1&& from, T2&& chars) -> GET_TYPE(from)
 
 // Replaces all the occurrences of the 'from' string with the 'to' string.
 template <typename T1, typename T2, typename T3>
-inline auto replace(T1&& s, T2&& from, T3&& to) -> GET_TYPE(s)
+inline GET_TYPE(T1) replace(T1&& s, T2&& from, T3&& to)
 {
-  typedef GET_TYPE(s) STRING;
+  typedef GET_TYPE(T1) STRING;
   const STRING& s_str(stringify(std::forward<T1>(s))),
       from_str(stringify(std::forward<T2>(from))),
       to_str(stringify(std::forward<T3>(to)));
@@ -173,13 +171,12 @@ inline auto replace(T1&& s, T2&& from, T3&& to) -> GET_TYPE(s)
 // specified. If the maximum number of tokens is reached, the last
 // token returned contains the remainder of the input string.
 template <typename T1, typename T2>
-inline auto tokenize(
+inline std::vector<GET_TYPE(T1)> tokenize(
     T1&& s,
     T2&& delims,
     const Option<size_t>& maxTokens = None())
-    -> std::vector<GET_TYPE(s)>
 {
-  typedef GET_TYPE(s) STRING;
+  typedef GET_TYPE(T1) STRING;
   const STRING& s_str(stringify(std::forward<T1>(s))),
       delims_str(stringify(std::forward<T2>(delims)));
 
@@ -224,13 +221,12 @@ inline auto tokenize(
 // specified. If the maximum number of tokens is reached, the last
 // token returned contains the remainder of the input string.
 template <typename T1, typename T2>
-inline auto split(
+inline std::vector<GET_TYPE(T1)> split(
     T1&& s,
     T2&& delims,
     const Option<size_t>& maxTokens = None())
-    -> std::vector<GET_TYPE(s)>
 {
-  typedef GET_TYPE(s) STRING;
+  typedef GET_TYPE(T1) STRING;
   const STRING& s_str(stringify(std::forward<T1>(s))),
       delims_str(stringify(std::forward<T2>(delims)));
 
@@ -269,13 +265,12 @@ inline auto split(
 //   bar: ["2"]
 //   foo: ["1", "3"]
 template <typename T1, typename T2, typename T3>
-inline auto pairs(
+inline std::map<GET_TYPE(T1), std::vector<GET_TYPE(T1)>> pairs(
     T1&& s,
     T2&& delims1,
     T3&& delims2)
-    -> std::map<GET_TYPE(s), std::vector<GET_TYPE(s)>>
 {
-  typedef GET_TYPE(s) STRING;
+  typedef GET_TYPE(T1) STRING;
   const STRING& s_str(stringify(std::forward<T1>(s))),
       delims1_str(stringify(std::forward<T2>(delims1))),
       delims2_str(stringify(std::forward<T3>(delims2)));
@@ -352,13 +347,13 @@ template <typename T,
           typename THead1,
           typename THead2,
           typename... TTail>
-auto join(
+GET_TYPE(T) join(
     const T& separator,
     THead1&& head1,
     THead2&& head2,
-    TTail&&... tail) -> GET_TYPE(separator)
+    TTail&&... tail)
 {
-  typedef GET_TYPE(separator) STRING;
+  typedef GET_TYPE(T) STRING;
   std::basic_stringstream<typename STRING::value_type> stream;
   internal::join(
       stream,
@@ -389,11 +384,11 @@ inline std::basic_string<T2> join(
 
 // Use duck-typing to join any iterable.
 template <typename Iterable, typename T>
-inline auto join(
+inline GET_TYPE(T) join(
     T&& separator,
-    const Iterable& i) -> GET_TYPE(separator)
+    const Iterable& i)
 {
-  typedef GET_TYPE(separator) STRING;
+  typedef GET_TYPE(T) STRING;
   const STRING& sep_str(stringify(std::forward<T>(separator)));
   STRING result;
   typename Iterable::const_iterator iterator = i.begin();
@@ -410,10 +405,10 @@ inline auto join(
 template <typename T>
 inline bool checkBracketsMatching(
     T&& s,
-    GET_TYPE(s)::value_type openBracket,
-    GET_TYPE(s)::value_type closeBracket)
+    GET_TYPE(T)::value_type openBracket,
+    GET_TYPE(T)::value_type closeBracket)
 {
-  typedef GET_TYPE(s) STRING;
+  typedef GET_TYPE(T) STRING;
   const STRING& s_str(stringify(std::forward<T>(s)));
   int count = 0;
   for (size_t i = 0; i < s_str.length(); i++) {
@@ -433,7 +428,7 @@ inline bool checkBracketsMatching(
 template <typename T1, typename T2>
 inline bool startsWith(T1&& s, T2&& prefix)
 {
-  typedef GET_TYPE(s) STRING;
+  typedef GET_TYPE(T1) STRING;
   const STRING& s_str(stringify(std::forward<T1>(s))),
       prefix_str(stringify(std::forward<T2>(prefix)));
   return s_str.size() >= prefix_str.size() &&
@@ -444,7 +439,7 @@ inline bool startsWith(T1&& s, T2&& prefix)
 template <typename T1, typename T2>
 inline bool endsWith(T1&& s, T2&& suffix)
 {
-  typedef GET_TYPE(s) STRING;
+  typedef GET_TYPE(T1) STRING;
   const STRING& s_str(stringify(std::forward<T1>(s))),
       suffix_str(stringify(std::forward<T2>(suffix)));
   return s_str.size() >= suffix_str.size() &&
@@ -455,7 +450,7 @@ inline bool endsWith(T1&& s, T2&& suffix)
 template <typename T1, typename T2>
 inline bool contains(T1&& s, T2&& substr)
 {
-  typedef GET_TYPE(s) STRING;
+  typedef GET_TYPE(T1) STRING;
   const STRING& s_str(stringify(std::forward<T1>(s))),
       substr_str(stringify(std::forward<T2>(substr)));
   return s_str.find(substr_str) != STRING::npos;
@@ -463,9 +458,9 @@ inline bool contains(T1&& s, T2&& substr)
 
 
 template <typename T>
-inline auto lower(T&& s) -> GET_TYPE(s)
+inline GET_TYPE(T) lower(T&& s)
 {
-  typedef GET_TYPE(s) STRING;
+  typedef GET_TYPE(T) STRING;
   STRING result = stringify(std::forward<T>(s));
   std::transform(result.begin(), result.end(), result.begin(), ::tolower);
   return result;
@@ -473,9 +468,9 @@ inline auto lower(T&& s) -> GET_TYPE(s)
 
 
 template <typename T>
-inline auto upper(T&& s) -> GET_TYPE(s)
+inline GET_TYPE(T) upper(T&& s)
 {
-  typedef GET_TYPE(s) STRING;
+  typedef GET_TYPE(T) STRING;
   STRING result = stringify(std::forward<T>(s));
   std::transform(result.begin(), result.end(), result.begin(), ::toupper);
   return result;

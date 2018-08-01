@@ -33,7 +33,7 @@
 #include "hashmap.hpp"
 #include "set.hpp"
 
-#define GET_TYPE(X) typename decide_string<decltype(X)>::type
+#define GET_TYPE(X) typename decide_string<X>::type
 
 // Any type that is convertible to `std::string` including `char` will be
 // `decide_string` to be `std::string`. Any type that cannot fall into
@@ -176,7 +176,7 @@ struct convert_decide {
 template <typename T1, typename T2>
 struct utf_convert_ {
   inline typename convert_decide<T1, T2&&>::type operator()(T2&& str) {
-    typedef GET_TYPE(str) STRING;
+    typedef GET_TYPE(T2) STRING;
     typedef typename STRING::value_type CHAR;
     return utf_convert__<T1, CHAR>()(stringify(std::forward<T2>(str)));
   }
