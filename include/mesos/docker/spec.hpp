@@ -18,21 +18,27 @@
 #define __MESOS_DOCKER_SPEC_HPP__
 
 #include <iostream>
+#include <memory>
 #include <string>
 
 #include <stout/error.hpp>
 #include <stout/json.hpp>
 #include <stout/option.hpp>
 #include <stout/try.hpp>
+#include <stout/variant.hpp>
 
 // ONLY USEFUL AFTER RUNNING PROTOC.
 #include <mesos/docker/spec.pb.h>
 
 #include <mesos/docker/v1.hpp>
 #include <mesos/docker/v2.hpp>
+#include <mesos/docker/v2_2.hpp>
 
 namespace docker {
 namespace spec {
+
+typedef Variant<v1::ImageManifest, v2::ImageManifest, v2_2::ImageManifest>
+  ImageManifest;
 
 // The prefix of whiteout files in a docker image.
 constexpr char WHITEOUT_PREFIX[] = ".wh.";
@@ -119,6 +125,26 @@ Try<ImageManifest> parse(const JSON::Object& json);
 Try<ImageManifest> parse(const std::string& s);
 
 } // namespace v2 {
+
+namespace v2_2 {
+
+// Validates if the specified docker v2 s2 image manifest conforms to the
+// Docker v2 s2 spec. Returns the error if the validation fails.
+Option<Error> validate(const ImageManifest& manifest);
+
+
+// Returns the docker v2 s2 image manifest from the given JSON object.
+Try<ImageManifest> parse(const JSON::Object& json);
+
+
+// Returns the docker v2 s2 image manifest from the given string.
+Try<ImageManifest> parse(const std::string& s);
+
+} // namespace v2_2 {
+
+Try<ImageManifest> parse(const JSON::Object& json);
+Try<ImageManifest> parse(const std::string& s);
+
 } // namespace spec {
 } // namespace docker {
 

@@ -90,10 +90,17 @@ static set<string> schemes()
 // command. The returned HTTP response will have the type 'BODY' (no
 // streaming).
 static Future<http::Response> curl(
-    const string& uri,
+    const string& _uri,
     const http::Headers& headers,
     const Option<Duration>& stallTimeout)
 {
+#ifdef __WINDOWS__
+  // Replace all '\' to '/'.
+  const string uri = strings::replace(_uri, "\\", "/");
+#else
+  const string& uri = _uri;
+#endif // __WINDOWS__
+
   vector<string> argv = {
     "curl",
     "-s",       // Don't show progress meter or error messages.
@@ -215,11 +222,18 @@ static Future<http::Response> curl(
 
 // TODO(jieyu): Add a comment here.
 static Future<int> download(
-    const string& uri,
+    const string& _uri,
     const string& blobPath,
     const http::Headers& headers,
     const Option<Duration>& stallTimeout)
 {
+#ifdef __WINDOWS__
+  // Replace all '\' to '/'.
+  const string uri = strings::replace(_uri, "\\", "/");
+#else
+  const string& uri = _uri;
+#endif // __WINDOWS__
+
   vector<string> argv = {
     "curl",
     "-s",                 // Don't show progress meter or error messages.
@@ -292,7 +306,11 @@ static Future<int> download(
             (output.isFailed() ? output.failure() : "discarded"));
       }
 
+#ifdef __WINDOWS__
+      vector<string> tokens = strings::tokenize(output.get(), "\r\n", 2);
+#else
       vector<string> tokens = strings::tokenize(output.get(), "\n", 2);
+#endif // __WINDOWS__
       if (tokens.empty()) {
         return Failure("Unexpected 'curl' output: " + output.get());
       }
@@ -320,13 +338,13 @@ static Future<int> download(
 
 static Future<int> download(
     const URI& uri,
+    const string& url,
     const string& directory,
     const http::Headers& headers,
     const Option<Duration>& stallTimeout)
 {
   const string blobPath = path::join(directory, Path(uri.path()).basename());
-  return download(
-      strings::trim(stringify(uri)), blobPath, headers, stallTimeout);
+  return download(url, blobPath, headers, stallTimeout);
 }
 
 
@@ -404,6 +422,12 @@ public:
       const string& directory,
       const Option<string>& data);
 
+  Future<Nothing> fetch(
+      const URI& uri,
+      vector<string> urls,
+      const string& directory,
+      const Option<string>& data);
+
 private:
   Future<Nothing> _fetch(
       const URI& uri,
@@ -416,19 +440,49 @@ private:
   Future<Nothing> __fetch(
       const URI& uri,
       const string& directory,
+      const URI& manifestUri,
       const http::Headers& authHeaders,
       const http::Response& response);
+
+  Future<Nothing> ___fetch(
+      const URI& uri,
+      Try<spec::ImageManifest> manifest,
+      const string& directory,
+      const http::Headers& authHeaders);
+
+  Future<Nothing> saveManifest(
+      const string& directory,
+      const http::Response& response);
+
+  Future<Nothing> saveManifest(
+      const string& directory,
+      const http::Response& response,
+      const string& filename);
 
   Future<Nothing> fetchBlob(
       const URI& uri,
       const string& directory,
       const http::Headers& authHeaders);
 
-  Future<Nothing> _fetchBlob(
-      const URI& uri,
-      const string& directory,
+  Future<Nothing> fetchBlob(
       const URI& blobUri,
+      const vector<string>& urls,
+      const string& directory,
+      const http::Headers& authHeaders);
+
+  Future<Nothing> _fetchBlob(
+      const URI& blobUri,
+      const vector<string>& urls,
+      const string& directory,
+      const string& blobUrl,
       const http::Headers& basicAuthHeaders);
+
+  Future<Nothing> onFetchBlobFailure(
+      const Future<Nothing>& f,
+      const URI& blobUri,
+      vector<string> urls,
+      const string& directory,
+      const http::Headers& authHeaders);
 
   Future<Nothing> __fetchBlob(int code);
 
@@ -535,8 +589,34 @@ Future<Nothing> DockerFetcherPlugin::fetch(
 }
 
 
+Future<Nothing> DockerFetcherPlugin::fetch(
+    const URI& uri,
+    const vector<string>& urls,
+    const string& directory,
+    const Option<string>& data) const
+{
+  return dispatch(
+      process.get(),
+      &DockerFetcherPluginProcess::fetch,
+      uri,
+      urls,
+      directory,
+      data);
+}
+
+
 Future<Nothing> DockerFetcherPluginProcess::fetch(
     const URI& uri,
+    const string& directory,
+    const Option<string>& data)
+{
+  return fetch(uri, vector<string>(), directory, data);
+}
+
+
+Future<Nothing> DockerFetcherPluginProcess::fetch(
+    const URI& uri,
+    vector<string> urls,
     const string& directory,
     const Option<string>& data)
 {
@@ -585,7 +665,8 @@ Future<Nothing> DockerFetcherPluginProcess::fetch(
   http::Headers basicAuthHeaders = getAuthHeaderBasic(uri, _auths);
 
   if (uri.scheme() == "docker-blob") {
-    return fetchBlob(uri, directory, basicAuthHeaders);
+    urls.emplace_back(strings::trim(stringify(getBlobUri(uri))));
+    return fetchBlob(getBlobUri(uri), urls, directory, basicAuthHeaders);
   }
 
   URI manifestUri = getManifestUri(uri);
@@ -596,8 +677,13 @@ Future<Nothing> DockerFetcherPluginProcess::fetch(
   // Note: The 'Accept' header is required for Amazon ECR. See:
   // https://forums.aws.amazon.com/message.jspa?messageID=780440
   http::Headers manifestHeaders = {
-    {"Accept", "application/vnd.docker.distribution.manifest.v1+json"}
-  };
+    {"Accept",
+#ifdef __WINDOWS__
+     "application/vnd.docker.distribution.manifest.v2+json"
+#else
+     "application/vnd.docker.distribution.manifest.v1+json"
+#endif // __WINDOWS__
+    }};
 
   return curl(manifestUri, manifestHeaders + basicAuthHeaders, stallTimeout)
     .then(defer(self(),
@@ -629,18 +715,20 @@ Future<Nothing> DockerFetcherPluginProcess::_fetch(
                       &Self::__fetch,
                       uri,
                       directory,
+                      manifestUri,
                       authHeaders,
                       lambda::_1));
       }));
   }
 
-  return __fetch(uri, directory, basicAuthHeaders, response);
+  return __fetch(uri, directory, manifestUri, basicAuthHeaders, response);
 }
 
 
 Future<Nothing> DockerFetcherPluginProcess::__fetch(
     const URI& uri,
     const string& directory,
+    const URI& manifestUri,
     const http::Headers& authHeaders,
     const http::Response& response)
 {
@@ -665,6 +753,9 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
     // 3. application/json
     // For more details, see:
     // https://docs.docker.com/registry/spec/manifest-v2-1/
+    //
+    // On Windows, we support V2 schema 2 instead:
+    // https://docs.docker.com/registry/spec/manifest-v2-2/
     bool isV2Schema1 =
       strings::startsWith(
           contentType.get(),
@@ -672,28 +763,86 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
       strings::startsWith(
           contentType.get(),
           "application/json");
+    bool isV2Schema2 =
+      strings::startsWith(
+          contentType.get(),
+          "application/vnd.docker.distribution.manifest.v2") ||
+      strings::startsWith(
+          contentType.get(),
+          "application/json");
 
-    if (!isV2Schema1) {
+    if (!isV2Schema1 && !isV2Schema2) {
       return Failure("Unsupported manifest MIME type: " + contentType.get());
     }
   }
 
-  Try<spec::v2::ImageManifest> manifest = spec::v2::parse(response.body);
+  Try<spec::ImageManifest> manifest = spec::parse(response.body);
   if (manifest.isError()) {
     return Failure("Failed to parse the image manifest: " + manifest.error());
   }
 
+  return manifest->visit(
+      [&](const spec::v1::ImageManifest& v1_manifest) -> Future<Nothing> {
+        return Failure("Version 1 manifest is unsupported");
+      },
+      [&](const spec::v2::ImageManifest& v2s1_manifest) -> Future<Nothing> {
+        return saveManifest(directory, response).then(defer(self(), [=]() {
+          return ___fetch(uri, manifest, directory, authHeaders);
+        }));
+      },
+      [&](const spec::v2_2::ImageManifest& v2s2_manifest) -> Future<Nothing> {
+        http::Headers manifestHeaders = {
+          {"Accept", "application/vnd.docker.distribution.manifest.v1+json"}};
+        return curl(manifestUri, manifestHeaders + authHeaders, stallTimeout)
+          .then(defer(self(), &Self::saveManifest, directory, lambda::_1))
+          .then(defer(
+              self(),
+              [=]() {
+                return ___fetch(uri, manifest, directory, authHeaders);
+              }))
+          .then(defer(self(), [=]() {
+            return saveManifest(directory, response, "manifest_v2s2");
+          }));
+      });
+}
+
+
+Future<Nothing> DockerFetcherPluginProcess::saveManifest(
+    const string& directory, const http::Response& response)
+{
+  return saveManifest(directory, response, "manifest");
+}
+
+
+Future<Nothing> DockerFetcherPluginProcess::saveManifest(
+    const string& directory,
+    const http::Response& response,
+    const string& filename)
+{
+  if (response.code != http::Status::OK) {
+    return Failure(
+        "Unexpected HTTP response '" + response.status + "' "
+        "when trying to save '" + filename + "'");
+  }
+
   // Save manifest to 'directory'.
-  Try<Nothing> write = os::write(
-      path::join(directory, "manifest"),
-      response.body);
+  Try<Nothing> write =
+    os::write(path::join(directory, filename), response.body);
 
   if (write.isError()) {
     return Failure(
-        "Failed to write the image manifest to "
+        "Failed to write the image manifest '" + filename + "' to "
         "'" + directory + "': " + write.error());
   }
+  return Nothing();
+}
 
+
+Future<Nothing> DockerFetcherPluginProcess::___fetch(
+    const URI& uri,
+    Try<spec::ImageManifest> manifest,
+    const string& directory,
+    const http::Headers& authHeaders) {
   // No need to proceed if we only want manifest.
   if (uri.scheme() == "docker-manifest") {
     return Nothing();
@@ -701,29 +850,63 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
 
   // Download all the filesystem layers.
   vector<Future<Nothing>> futures;
-  for (int i = 0; i < manifest->fslayers_size(); i++) {
-    URI blob = uri::docker::blob(
-        uri.path(),                         // The 'repository'.
-        manifest->fslayers(i).blobsum(),    // The 'digest'.
-        uri.host(),                         // The 'registry'.
-        (uri.has_fragment()                 // The 'scheme'.
-          ? Option<string>(uri.fragment())
-          : None()),
-        (uri.has_port()                     // The 'port'.
-          ? Option<int>(uri.port())
-          : None()));
+  Future<Nothing> result = manifest->visit(
+      [&](const spec::v1::ImageManifest& v1_manifest) -> Future<Nothing> {
+        return Failure("Version 1 manifest is unsupported");
+      },
+      [&](const spec::v2::ImageManifest& s1_manifest) -> Future<Nothing> {
+        for (int i = 0; i < s1_manifest.fslayers_size(); i++) {
+          URI blob = uri::docker::blob(
+              uri.path(),                        // The 'repository'.
+              s1_manifest.fslayers(i).blobsum(), // The 'digest'.
+              uri.host(),                        // The 'registry'.
+              (uri.has_fragment()                // The 'scheme'.
+                 ? Option<string>(uri.fragment())
+                 : None()),
+              (uri.has_port()                    // The 'port'.
+                 ? Option<int>(uri.port())
+                 : None()));
 
-    // Use the same 'authHeaders' as for the manifest to pull the blobs.
-    futures.push_back(fetchBlob(
-        blob,
-        directory,
-        authHeaders));
+          // Use the same 'authHeaders' as for the manifest to pull the blobs.
+          futures.push_back(fetchBlob(blob, directory, authHeaders));
+        }
+
+        return Nothing();
+      },
+      [&](const spec::v2_2::ImageManifest& s2_manifest) -> Future<Nothing> {
+        for (int i = 0; i < s2_manifest.layers_size(); i++) {
+          URI blob = uri::docker::blob(
+              uri.path(),                     // The 'repository'.
+              s2_manifest.layers(i).digest(), // The 'digest'.
+              uri.host(),                     // The 'registry'.
+              (uri.has_fragment()             // The 'scheme'.
+                 ? Option<string>(uri.fragment())
+                 : None()),
+              (uri.has_port()                 // The 'port'.
+                 ? Option<int>(uri.port())
+                 : None()));
+
+          vector<string> urls;
+          URI blobUri = getBlobUri(blob);
+          urls.emplace_back(strings::trim(stringify(blobUri)));
+          for (int j = 0; j < s2_manifest.layers(i).urls_size(); ++j) {
+            string url = s2_manifest.layers(i).urls(j);
+            urls.emplace_back(url);
+          }
+
+          // Use the same 'authHeaders' as for the manifest to pull the blobs.
+          futures.push_back(fetchBlob(blobUri, urls, directory, authHeaders));
+        }
+
+        return Nothing();
+      });
+
+  if (result.isFailed()) {
+    return result;
   }
 
-  return collect(futures)
-    .then([]() -> Future<Nothing> { return Nothing(); });
+  return collect(futures).then([]() -> Future<Nothing> { return Nothing(); });
 }
-
 
 Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
     const URI& uri,
@@ -731,33 +914,53 @@ Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
     const http::Headers& authHeaders)
 {
   URI blobUri = getBlobUri(uri);
+  vector<string> urls;
+  urls.emplace_back(strings::trim(stringify(blobUri)));
+  return fetchBlob(blobUri, urls, directory, authHeaders);
+}
 
-  return download(blobUri, directory, authHeaders, stallTimeout)
+Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
+    const URI& blobUri,
+    const vector<string>& urls,
+    const string& directory,
+    const http::Headers& authHeaders)
+{
+  string blobUrl = urls.back();
+
+  return download(blobUri, blobUrl, directory, authHeaders, stallTimeout)
     .then(defer(self(), [=](int code) -> Future<Nothing> {
       if (code == http::Status::UNAUTHORIZED) {
         // If we get a '401 Unauthorized', we assume that 'authHeaders'
         // is either empty or contains the 'Basic' credential, and we
         // can use it to request an auth token.
         // TODO(chhsiao): What if 'authHeaders' has an expired token?
-        return _fetchBlob(uri, directory, blobUri, authHeaders);
+        return _fetchBlob(blobUri, urls, directory, blobUrl, authHeaders);
       }
 
-      return __fetchBlob(code);
+      return __fetchBlob(code).recover(defer(
+          self(),
+          &Self::onFetchBlobFailure,
+          lambda::_1,
+          blobUri,
+          urls,
+          directory,
+          authHeaders));
     }));
 }
 
 
 Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
-    const URI& uri,
-    const string& directory,
     const URI& blobUri,
+    const vector<string>& urls,
+    const string& directory,
+    const string& blobUrl,
     const http::Headers& basicAuthHeaders)
 {
   // TODO(jieyu): This extra 'curl' call can be avoided if we can get
   // HTTP headers from 'download'. Currently, 'download' only returns
   // the HTTP response code because we don't support parsing HTTP
   // headers alone. Revisit this once that's supported.
-  return curl(blobUri, basicAuthHeaders, stallTimeout)
+  return curl(blobUrl, basicAuthHeaders, stallTimeout)
     .then(defer(self(), [=](const http::Response& response) -> Future<Nothing> {
       // We expect a '401 Unauthorized' response here since the
       // 'download' with the same URI returns a '401 Unauthorized'.
@@ -768,14 +971,37 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
       }
 
       return getAuthHeader(blobUri, basicAuthHeaders, response)
-        .then(defer(self(), [=](
-            const http::Headers& authHeaders) -> Future<Nothing> {
-          return download(blobUri, directory, authHeaders, stallTimeout)
-            .then(defer(self(),
-                        &Self::__fetchBlob,
-                        lambda::_1));
-        }));
+        .then(defer(
+            self(), [=](const http::Headers& authHeaders) -> Future<Nothing> {
+              return download(
+                         blobUri, blobUrl, directory, authHeaders, stallTimeout)
+                .then(defer(self(), &Self::__fetchBlob, lambda::_1))
+                .recover(defer(
+                    self(),
+                    &Self::onFetchBlobFailure,
+                    lambda::_1,
+                    blobUri,
+                    urls,
+                    directory,
+                    authHeaders));
+            }));
     }));
+}
+
+
+Future<Nothing> DockerFetcherPluginProcess::onFetchBlobFailure(
+  const Future<Nothing>& f,
+  const URI& blobUri,
+  vector<string> urls,
+  const string& directory,
+  const http::Headers& authHeaders)
+{
+  urls.pop_back();
+  if (!urls.empty()) {
+    return fetchBlob(blobUri, urls, directory, authHeaders);
+  } else {
+    return Failure(f.failure());
+  }
 }
 
 
@@ -792,7 +1018,7 @@ Future<Nothing> DockerFetcherPluginProcess::__fetchBlob(int code)
 
 
 Future<http::Headers> DockerFetcherPluginProcess::getAuthHeader(
-    const URI& uri,
+    const URI& blobUri,
     const http::Headers& basicAuthHeaders,
     const http::Response& response)
 {

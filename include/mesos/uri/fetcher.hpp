@@ -17,6 +17,7 @@
 #ifndef __MESOS_URI_FETCHER_HPP__
 #define __MESOS_URI_FETCHER_HPP__
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -79,6 +80,27 @@ public:
         const URI& uri,
         const std::string& directory,
         const Option<std::string>& data = None()) const = 0;
+
+    /**
+     * Fetches a URI with multiple possible URLs to the given directory.
+     * To avoid blocking or crashing the current thread, this method might
+     * choose to fork subprocesses for third party commands.
+     *
+     * If not overrided by child classes, `urls` is simply ignored and
+     * `fetch(uri, directory, data)` is used.
+     *
+     * This is used to support version 2 schema 2 image manifest.
+     *
+     * @param uri the URI to fetch
+     * @param urls the URLs to locate the resource
+     * @param directory the directory the URI will be downloaded to
+     * @param data the optional user defined data
+     */
+    virtual process::Future<Nothing> fetch(
+        const URI& uri,
+        const std::vector<std::string>& urls,
+        const std::string& directory,
+        const Option<std::string>& data = None()) const;
   };
 
   /**
@@ -99,6 +121,24 @@ public:
   // TODO(jieyu): Consider using 'Path' for 'directory' here.
   process::Future<Nothing> fetch(
       const URI& uri,
+      const std::string& directory,
+      const Option<std::string>& data = None()) const;
+
+  /**
+   * Fetches a URI with multiple possible URLs to the given directory.
+   * This method will dispatch the call to the corresponding plugin based
+   * on uri.scheme.
+   *
+   * This is used to support version 2 schema 2 image manifest.
+   *
+   * @param uri the URI to fetch
+   * @param urls the URLs to locate the resource
+   * @param directory the directory the URI will be downloaded to
+   * @param data the optional user defined data
+   */
+  process::Future<Nothing> fetch(
+      const URI& uri,
+      const std::vector<std::string>& urls,
       const std::string& directory,
       const Option<std::string>& data = None()) const;
 
