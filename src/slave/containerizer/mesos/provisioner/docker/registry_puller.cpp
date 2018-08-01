@@ -14,6 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <memory>
+
 #include <glog/logging.h>
 
 #include <mesos/secret/resolver.hpp>
@@ -38,6 +40,7 @@
 namespace http = process::http;
 namespace spec = docker::spec;
 
+using std::shared_ptr;
 using std::string;
 using std::vector;
 
@@ -358,7 +361,13 @@ Future<vector<string>> RegistryPullerProcess::___pull(
   // sure ids are unique.
   hashset<string> uniqueIds;
   vector<string> layerIds;
+#ifdef __WINDOWS__
+  vector<Path> tarPaths;
+  shared_ptr<vector<Path>> layerPaths(new vector<Path>);
+  Future<Nothing> future;
+#else
   vector<Future<Nothing>> futures;
+#endif // __WINDOWS__
 
   // The order of `fslayers` should be [child, parent, ...].
   //
@@ -375,9 +384,7 @@ Future<vector<string>> RegistryPullerProcess::___pull(
       continue;
     }
 
-    // NOTE: We put parent layer ids in front because that's what the
-    // provisioner backends assume.
-    layerIds.insert(layerIds.begin(), v1.id());
+    layerIds.emplace_back(v1.id());
     uniqueIds.insert(v1.id());
 
     // Skip if the layer is already in the store.
@@ -409,14 +416,49 @@ Future<vector<string>> RegistryPullerProcess::___pull(
           v1.id() + "': " + write.error());
     }
 
+#ifdef __WINDOWS__
+    tarPaths.emplace_back(tar);
+    layerPaths->emplace_back(rootfs);
+#else
     futures.push_back(command::untar(Path(tar), Path(rootfs)));
+#endif // __WINDOWS__
   }
 
+#ifdef __WINDOWS__
+  // Both `tarPaths` and `layerPaths` have their last element belongs to base.
+  //
+  // Becuase blobSum contains ':' which is illegal in Windows path, we replace
+  // it with `_`. This is consistent with DockerFetcher.
+  //
+  // Inefficient O(n^2) if number of layers is huge due to copying a range of
+  // layers for each wclayer call.
+  if (!tarPaths.empty()) {
+    auto tar = tarPaths.crbegin();
+    auto rootfs = layerPaths->cend() - 1;
+    future = command::wclayer_import(
+        Path(path::replaceColon(*tar)), vector<Path>(), *rootfs);
+    ++tar;
+    for (; tar < tarPaths.crend(); ++tar) {
+      Path tarPath = *tar;
+      --rootfs;
+      future = future.then([=]() {
+        return command::wclayer_import(
+            Path(path::replaceColon(tarPath)),
+            vector<Path>(rootfs + 1, layerPaths->cend()),
+            *rootfs);
+      });
+    }
+  } else {
+    future = Nothing();
+  }
+  return future
+#else
   return collect(futures)
+#endif
     .then([=]() -> Future<vector<string>> {
       // Remove the tarballs after the extraction.
       foreach (const string& blobSum, blobSums) {
-        const string tar = path::join(directory, blobSum);
+        const string tar = path::replaceColon(path::join(directory, blobSum));
 
         Try<Nothing> rm = os::rm(tar);
         if (rm.isError()) {
@@ -426,7 +468,9 @@ Future<vector<string>> RegistryPullerProcess::___pull(
         }
       }
 
-      return layerIds;
+      // NOTE: We reverse the vector to put parent layer ids in front
+      // because that's what the provisioner backends assume.
+      return vector<string>(layerIds.crbegin(), layerIds.crend());
     });
 }
 
