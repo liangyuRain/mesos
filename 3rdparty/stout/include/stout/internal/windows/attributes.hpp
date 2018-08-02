@@ -24,13 +24,19 @@
 namespace internal {
 namespace windows {
 
-inline Try<DWORD> get_file_attributes(const std::wstring& path) {
-  const DWORD attributes = ::GetFileAttributesW(path.data());
-  if (attributes == INVALID_FILE_ATTRIBUTES) {
-    return WindowsError(
-        "Failed to get attributes for file '" + narrow_stringify(path) + "'");
+template <typename T>
+inline Try<DWORD> get_file_attributes(T&& path)
+{
+  {
+    const std::wstring& path(
+        ::internal::windows::longpath(std::forward<T>(path)));
+    const DWORD attributes = ::GetFileAttributesW(path.data());
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+      return WindowsError(
+          "Failed to get attributes for file '" + narrow_stringify(path) + "'");
+    }
+    return attributes;
   }
-  return attributes;
 }
 
 } // namespace windows {

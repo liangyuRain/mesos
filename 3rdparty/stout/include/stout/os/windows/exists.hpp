@@ -23,30 +23,38 @@
 
 namespace os {
 
+inline bool exists(const std::wstring& path)
+{
+  {
+    const std::wstring& path(::internal::windows::longpath(path));
+
+    // NOTE: `GetFileAttributes` returns `INVALID_FILE_ATTRIBUTES` if the file
+    // could not be opened for any reason. Checking for one of two 'not found'
+    // error codes (`ERROR_FILE_NOT_FOUND` or `ERROR_PATH_NOT_FOUND`) is a
+    // reliable test for whether the file or directory exists. See also [1] for
+    // more information on this technique.
+    //
+    // [1] http://blogs.msdn.com/b/oldnewthing/archive/2007/10/23/5612082.aspx
+    const DWORD attributes = ::GetFileAttributesW(path.data());
+
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+      const DWORD error = ::GetLastError();
+      if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) {
+        return false;
+      }
+    }
+
+    // Note that `ERROR_ACCESS_DENIED` etc. indicates the path does exist, but
+    // `INVALID_FILE_ATTRIBUTES` would still be returned.
+
+    return true;
+  }
+}
+
 
 inline bool exists(const std::string& path)
 {
-  // NOTE: `GetFileAttributes` returns `INVALID_FILE_ATTRIBUTES` if the file
-  // could not be opened for any reason. Checking for one of two 'not found'
-  // error codes (`ERROR_FILE_NOT_FOUND` or `ERROR_PATH_NOT_FOUND`) is a
-  // reliable test for whether the file or directory exists. See also [1] for
-  // more information on this technique.
-  //
-  // [1] http://blogs.msdn.com/b/oldnewthing/archive/2007/10/23/5612082.aspx
-  const DWORD attributes = ::GetFileAttributesW(
-      ::internal::windows::longpath(path).data());
-
-  if (attributes == INVALID_FILE_ATTRIBUTES) {
-    const DWORD error = ::GetLastError();
-    if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) {
-      return false;
-    }
-  }
-
-  // Note that `ERROR_ACCESS_DENIED` etc. indicates the path does exist, but
-  // `INVALID_FILE_ATTRIBUTES` would still be returned.
-
-  return true;
+  return exists(::internal::windows::longpath(path));
 }
 
 
