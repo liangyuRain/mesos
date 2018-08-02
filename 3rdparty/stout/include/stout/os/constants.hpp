@@ -24,6 +24,7 @@ constexpr char POSIX_PATH_SEPARATOR = '/';
 constexpr char PATH_SEPARATOR = POSIX_PATH_SEPARATOR;
 #else
 constexpr char PATH_SEPARATOR = WINDOWS_PATH_SEPARATOR;
+constexpr wchar_t W_PATH_SEPARATOR = (wchar_t) WINDOWS_PATH_SEPARATOR;
 #endif // __WINDOWS__
 
 #ifndef __WINDOWS__
@@ -39,6 +40,7 @@ constexpr char DEV_NULL[] = "NUL";
 // NOTE: We do not use a R"raw string" here because syntax highlighters do not
 // handle mismatched backslashes well.
 constexpr char LONGPATH_PREFIX[] = "\\\\?\\";
+constexpr wchar_t W_LONGPATH_PREFIX[] = L"\\\\?\\";
 #endif // __WINDOWS__
 
 } // namespace os {
