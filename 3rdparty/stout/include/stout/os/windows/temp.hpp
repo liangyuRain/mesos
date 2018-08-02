@@ -30,8 +30,7 @@ namespace os {
 inline std::string temp()
 {
   const size_t size = static_cast<size_t>(MAX_PATH) + 2;
-  std::vector<wchar_t> buffer;
-  buffer.reserve(size);
+  std::vector<wchar_t> buffer(size);
   if (::GetTempPathW(static_cast<DWORD>(size), buffer.data()) == 0) {
     // Failed, use current directory.
     if (::GetCurrentDirectoryW(static_cast<DWORD>(size), buffer.data()) == 0) {
@@ -40,7 +39,7 @@ inline std::string temp()
     }
   }
 
-  return narrow_stringify(std::wstring(buffer.data()));
+  return narrow_stringify(buffer.data());
 }
 
 } // namespace os {

@@ -24,25 +24,27 @@
 
 namespace os {
 
-inline Try<std::list<std::string>> ls(const std::string& directory)
+template <typename T>
+inline Try<std::list<std::string>> ls(T&& directory)
 {
   // Ensure the path ends with a backslash.
-  std::string path = directory;
-  if (!strings::endsWith(path, "\\")) {
-    path += "\\";
+  std::wstring path = string_convert<wchar_t>(directory);
+  if (!strings::endsWith(path, L"\\")) {
+    path += L"\\";
   }
 
   // Get first file matching pattern `X:\path\to\wherever\*`.
   WIN32_FIND_DATAW found;
   const std::wstring search_pattern =
-    ::internal::windows::longpath(path) + L"*";
+      ::internal::windows::longpath(std::move(path)) + L"*";
 
   const SharedHandle search_handle(
       ::FindFirstFileW(search_pattern.data(), &found),
       ::FindClose);
 
   if (search_handle.get() == INVALID_HANDLE_VALUE) {
-    return WindowsError("Failed to search '" + directory + "'");
+    return WindowsError("Failed to search '" +
+                        string_convert<char>(directory) + "'");
   }
 
   std::list<std::string> result;
