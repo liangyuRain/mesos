@@ -33,27 +33,44 @@
 namespace os {
 namespace stat {
 
-// Forward declaration.
-inline bool islink(const std::string& path);
+template <typename T>
+inline bool islink(T&& path)
+{
+  Try<::internal::windows::SymbolicLink> symlink =
+    ::internal::windows::query_symbolic_link_data(std::forward<T>(path));
+
+  return symlink.isSome();
+}
+
+
+inline bool isdir(
+    const std::wstring& path,
+    const FollowSymlink follow = FollowSymlink::FOLLOW_SYMLINK)
+{
+  {
+    const std::wstring& path(::internal::windows::longpath(path));
+    // A symlink itself is not a directory.
+    // If it's not a link, we ignore `follow`.
+    if (follow == FollowSymlink::DO_NOT_FOLLOW_SYMLINK && islink(path)) {
+      return false;
+    }
+
+    const Try<DWORD> attributes = ::internal::windows::get_file_attributes(path);
+
+    if (attributes.isError()) {
+      return false;
+    }
+
+    return attributes.get() & FILE_ATTRIBUTE_DIRECTORY;
+  }
+}
+
 
 inline bool isdir(
     const std::string& path,
     const FollowSymlink follow = FollowSymlink::FOLLOW_SYMLINK)
 {
-  // A symlink itself is not a directory.
-  // If it's not a link, we ignore `follow`.
-  if (follow == FollowSymlink::DO_NOT_FOLLOW_SYMLINK && islink(path)) {
-    return false;
-  }
-
-  const Try<DWORD> attributes = ::internal::windows::get_file_attributes(
-      ::internal::windows::longpath(path));
-
-  if (attributes.isError()) {
-    return false;
-  }
-
-  return attributes.get() & FILE_ATTRIBUTE_DIRECTORY;
+  return isdir(::internal::windows::longpath(path));
 }
 
 
@@ -70,39 +87,34 @@ inline bool isdir(const int_fd& fd)
 }
 
 
+template <typename T>
 inline bool isfile(
-    const std::string& path,
+    T&& path,
     const FollowSymlink follow = FollowSymlink::FOLLOW_SYMLINK)
 {
-  // A symlink itself is a file, but not a regular file.
-  // On POSIX, this check is done with `S_IFREG`, which
-  // returns false for symbolic links.
-  // If it's not a link, we ignore `follow`.
-  if (follow == FollowSymlink::DO_NOT_FOLLOW_SYMLINK && islink(path)) {
-    return false;
+  {
+    const std::wstring& path(::internal::windows::longpath(std::forward<T>(path)));
+    // A symlink itself is a file, but not a regular file.
+    // On POSIX, this check is done with `S_IFREG`, which
+    // returns false for symbolic links.
+    // If it's not a link, we ignore `follow`.
+    if (follow == FollowSymlink::DO_NOT_FOLLOW_SYMLINK && islink(path)) {
+      return false;
+    }
+
+    const Try<DWORD> attributes =
+        ::internal::windows::get_file_attributes(path);
+
+    if (attributes.isError()) {
+      return false;
+    }
+
+    // NOTE: Windows files attributes do not define a flag for "regular"
+    // files. Instead, this call will only return successfully iff the
+    // given file or directory exists. Checking against the directory
+    // flag determines if the path is a file or directory.
+    return !(attributes.get() & FILE_ATTRIBUTE_DIRECTORY);
   }
-
-  const Try<DWORD> attributes = ::internal::windows::get_file_attributes(
-      ::internal::windows::longpath(path));
-
-  if (attributes.isError()) {
-    return false;
-  }
-
-  // NOTE: Windows files attributes do not define a flag for "regular"
-  // files. Instead, this call will only return successfully iff the
-  // given file or directory exists. Checking against the directory
-  // flag determines if the path is a file or directory.
-  return !(attributes.get() & FILE_ATTRIBUTE_DIRECTORY);
-}
-
-
-inline bool islink(const std::string& path)
-{
-  Try<::internal::windows::SymbolicLink> symlink =
-    ::internal::windows::query_symbolic_link_data(path);
-
-  return symlink.isSome();
 }
 
 
@@ -110,23 +122,34 @@ inline bool islink(const std::string& path)
 // symbolic link with `follow` set to `DO_NOT_FOLLOW_SYMLINK`, this will return
 // zero because that's what Windows says.
 inline Try<Bytes> size(
+    const std::wstring& path,
+    const FollowSymlink follow = FollowSymlink::FOLLOW_SYMLINK)
+{
+  {
+    const std::wstring& path(::internal::windows::longpath(path));
+    const Try<SharedHandle> handle = (follow == FollowSymlink::FOLLOW_SYMLINK)
+      ? ::internal::windows::get_handle_follow(path)
+      : ::internal::windows::get_handle_no_follow(path);
+    if (handle.isError()) {
+      return Error("Error obtaining handle to file: " + handle.error());
+    }
+
+    LARGE_INTEGER file_size;
+
+    if (::GetFileSizeEx(handle->get_handle(), &file_size) == 0) {
+      return WindowsError();
+    }
+
+    return Bytes(file_size.QuadPart);
+  }
+}
+
+
+inline Try<Bytes> size(
     const std::string& path,
     const FollowSymlink follow = FollowSymlink::FOLLOW_SYMLINK)
 {
-  const Try<SharedHandle> handle = (follow == FollowSymlink::FOLLOW_SYMLINK)
-    ? ::internal::windows::get_handle_follow(path)
-    : ::internal::windows::get_handle_no_follow(path);
-  if (handle.isError()) {
-    return Error("Error obtaining handle to file: " + handle.error());
-  }
-
-  LARGE_INTEGER file_size;
-
-  if (::GetFileSizeEx(handle->get_handle(), &file_size) == 0) {
-    return WindowsError();
-  }
-
-  return Bytes(file_size.QuadPart);
+  return size(::internal::windows::longpath(path));
 }
 
 
@@ -142,37 +165,41 @@ inline Try<Bytes> size(const int_fd& fd)
 }
 
 
+template <typename T>
 inline Try<long> mtime(
-    const std::string& path,
+    T&& path,
     const FollowSymlink follow = FollowSymlink::FOLLOW_SYMLINK)
 {
-  if (follow == FollowSymlink::DO_NOT_FOLLOW_SYMLINK && islink(path)) {
-    return Error(
-        "Requested mtime for '" + path +
-        "', but symbolic links don't have an mtime on Windows");
+  {
+    const std::wstring& path(::internal::windows::longpath(std::forward<T>(path)));
+    if (follow == FollowSymlink::DO_NOT_FOLLOW_SYMLINK && islink(path)) {
+      return Error(
+          "Requested mtime for '" + narrow_stringify(path) +
+          "', but symbolic links don't have an mtime on Windows");
+    }
+
+    Try<SharedHandle> handle =
+      (follow == FollowSymlink::FOLLOW_SYMLINK)
+        ? ::internal::windows::get_handle_follow(path)
+        : ::internal::windows::get_handle_no_follow(path);
+    if (handle.isError()) {
+      return Error(handle.error());
+    }
+
+    FILETIME filetime;
+    // The last argument is file write time, AKA modification time.
+    const BOOL result =
+      ::GetFileTime(handle->get_handle(), nullptr, nullptr, &filetime);
+    if (result == FALSE) {
+      return WindowsError();
+    }
+
+    const uint64_t unixtime = os::internal::windows_to_unix_epoch(filetime);
+
+    // We choose to make this conversion explicit because we expect the
+    // truncation to not cause information loss.
+    return static_cast<long>(unixtime);
   }
-
-  Try<SharedHandle> handle =
-    (follow == FollowSymlink::FOLLOW_SYMLINK)
-      ? ::internal::windows::get_handle_follow(path)
-      : ::internal::windows::get_handle_no_follow(path);
-  if (handle.isError()) {
-    return Error(handle.error());
-  }
-
-  FILETIME filetime;
-  // The last argument is file write time, AKA modification time.
-  const BOOL result =
-    ::GetFileTime(handle->get_handle(), nullptr, nullptr, &filetime);
-  if (result == FALSE) {
-    return WindowsError();
-  }
-
-  const uint64_t unixtime = os::internal::windows_to_unix_epoch(filetime);
-
-  // We choose to make this conversion explicit because we expect the
-  // truncation to not cause information loss.
-  return static_cast<long>(unixtime);
 }
 
 

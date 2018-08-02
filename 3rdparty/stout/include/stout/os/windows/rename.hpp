@@ -25,30 +25,36 @@
 
 namespace os {
 
-inline Try<Nothing> rename(const std::string& from, const std::string& to)
+template <typename T1, typename T2>
+inline Try<Nothing> rename(T1&& from, T2&& to)
 {
-  // Use `MoveFile` to perform the file move. The MSVCRT implementation of
-  // `::rename` fails if the `to` file already exists[1], while some UNIX
-  // implementations allow that[2].
-  //
-  // Use `MOVEFILE_COPY_ALLOWED` to allow moving the file to another volume and
-  // `MOVEFILE_REPLACE_EXISTING` to comply with the UNIX implementation and
-  // replace an existing file[3].
-  //
-  // [1] https://msdn.microsoft.com/en-us/library/zw5t957f.aspx
-  // [2] http://man7.org/linux/man-pages/man2/rename.2.html
-  // [3] https://msdn.microsoft.com/en-us/library/windows/desktop/aa365240(v=vs.85).aspx
-  const BOOL result = ::MoveFileExW(
-      ::internal::windows::longpath(from).data(),
-      ::internal::windows::longpath(to).data(),
-      MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING);
+  {
+    const std::wstring& from(
+        ::internal::windows::longpath(std::forward<T1>(from)));
+    const std::wstring& to(
+        ::internal::windows::longpath(std::forward<T2>(to)));
+    // Use `MoveFile` to perform the file move. The MSVCRT implementation of
+    // `::rename` fails if the `to` file already exists[1], while some UNIX
+    // implementations allow that[2].
+    //
+    // Use `MOVEFILE_COPY_ALLOWED` to allow moving the file to another volume and
+    // `MOVEFILE_REPLACE_EXISTING` to comply with the UNIX implementation and
+    // replace an existing file[3].
+    //
+    // [1] https://msdn.microsoft.com/en-us/library/zw5t957f.aspx
+    // [2] http://man7.org/linux/man-pages/man2/rename.2.html
+    // [3] https://msdn.microsoft.com/en-us/library/windows/desktop/aa365240(v=vs.85).aspx
+    const BOOL result = ::MoveFileExW(from.data(), to.data(),
+        MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING);
 
-  if (!result) {
-    return WindowsError(
-        "`os::rename` failed to move file '" + from + "' to '" + to + "'");
+    if (!result) {
+      return WindowsError(
+          "`os::rename` failed to move file '" + narrow_stringify(from) +
+          "' to '" + narrow_stringify(to) + "'");
+    }
+
+    return Nothing();
   }
-
-  return Nothing();
 }
 
 } // namespace os {

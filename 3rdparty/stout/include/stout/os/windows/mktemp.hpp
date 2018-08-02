@@ -36,10 +36,11 @@ namespace os {
 // template may be any path with _6_ `Xs' appended to it, for example
 // /tmp/temp.XXXXXX. The trailing `Xs' are replaced with a unique
 // alphanumeric combination.
-inline Try<std::string> mktemp(
-    const std::string& path = path::join(os::temp(), "XXXXXX"))
+template <typename T>
+inline Try<std::string> mktemp(T&& path)
 {
-  const std::wstring longpath = ::internal::windows::longpath(path);
+  const std::wstring& longpath(
+      ::internal::windows::longpath(std::forward<T>(path)));
   std::vector<wchar_t> buffer(longpath.begin(), longpath.end());
 
   // The range does not include the null terminator, needed to reconstruct
@@ -55,7 +56,7 @@ inline Try<std::string> mktemp(
     return WindowsError();
   }
 
-  const std::string temp_file = narrow_stringify(std::wstring(buffer.data()));
+  const std::wstring temp_file(buffer.data());
 
   // NOTE: We open the file with read/write access for the given user, an
   // attempt to match POSIX's specification of `mkstemp`. We use `_S_IREAD` and
@@ -72,7 +73,16 @@ inline Try<std::string> mktemp(
   // mkstemp(). Also an unsuccessful close() doesn't affect the file.
   os::close(fd.get());
 
-  return strings::remove(temp_file, os::LONGPATH_PREFIX, strings::Mode::PREFIX);
+  return narrow_stringify(strings::remove(
+      temp_file,
+      os::W_LONGPATH_PREFIX,
+      strings::Mode::PREFIX));
+}
+
+
+inline Try<std::string> mktemp()
+{
+  return mktemp(path::join(os::temp(), "XXXXXX"));
 }
 
 } // namespace os {
