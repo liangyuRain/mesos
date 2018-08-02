@@ -108,14 +108,19 @@ struct SymbolicLink
 // Checks file/folder attributes for a path to see if the reparse point
 // attribute is set; this indicates whether the path points at a reparse point,
 // rather than a "normal" file or folder.
-inline Try<bool> reparse_point_attribute_set(const std::wstring& absolute_path)
+template <typename T>
+inline Try<bool> reparse_point_attribute_set(T&& absolute_path)
 {
-  const Try<DWORD> attributes = get_file_attributes(absolute_path.data());
-  if (attributes.isError()) {
-    return Error(attributes.error());
-  }
+  {
+    const std::wstring& absolute_path(
+        ::internal::windows::longpath(std::forward<T>(absolute_path)));
+    const Try<DWORD> attributes = get_file_attributes(absolute_path);
+    if (attributes.isError()) {
+      return Error(attributes.error());
+    }
 
-  return (attributes.get() & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+    return (attributes.get() & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+  }
 }
 
 
@@ -152,118 +157,126 @@ inline Try<SymbolicLink> build_symbolic_link(const REPARSE_DATA_BUFFER& data)
 // Attempts to get a file or folder handle for an absolute path, and follows
 // symlinks. That is, if the path points at a symlink, the handle will refer to
 // the file or folder the symlink points at, rather than the symlink itself.
-inline Try<SharedHandle> get_handle_follow(const std::string& absolute_path)
+template <typename T>
+inline Try<SharedHandle> get_handle_follow(T&& absolute_path)
 {
-  const Try<DWORD> attributes = get_file_attributes(longpath(absolute_path));
+  {
+    const std::wstring& absolute_path(longpath(std::forward<T>(absolute_path)));
+    const Try<DWORD> attributes = get_file_attributes(absolute_path);
 
-  if (attributes.isError()) {
-    return Error(attributes.error());
+    if (attributes.isError()) {
+      return Error(attributes.error());
+    }
+
+    bool resolved_path_is_directory = attributes.get() & FILE_ATTRIBUTE_DIRECTORY;
+
+    // NOTE: The name of `CreateFile` is misleading: it is also used to retrieve
+    // handles to existing files or directories as if it were actually `OpenPath`
+    // (which does not exist). We use `OPEN_EXISTING` but not
+    // `FILE_FLAG_OPEN_REPARSE_POINT` to explicitily follow (resolve) symlinks in
+    // the path to the file or directory.
+    //
+    // Note also that `CreateFile` will appropriately generate a handle for
+    // either a folder or a file, as long as the appropriate flag is being set:
+    // `FILE_FLAG_BACKUP_SEMANTICS`.
+    //
+    // The `FILE_FLAG_BACKUP_SEMANTICS` flag is being set whenever the target is
+    // a directory. According to MSDN[1]: "You must set this flag to obtain a
+    // handle to a directory. A directory handle can be passed to some functions
+    // instead of a file handle". More `FILE_FLAG_BACKUP_SEMANTICS` documentation
+    // can be found in MSDN[2].
+    //
+    // The `GENERIC_READ` flag is being used because it's the most common way of
+    // opening a file for reading only. The `SHARE` flags allow other processes
+    // to read the file at the same time, as well as allow this process to read
+    // files that were also opened with these flags. MSDN[1] provides a more
+    // detailed explanation of these flags.
+    //
+    // [1] https://msdn.microsoft.com/en-us/library/windows/desktop/aa363858(v=vs.85).aspx // NOLINT(whitespace/line_length)
+    // [2] https://msdn.microsoft.com/en-us/library/windows/desktop/aa364399(v=vs.85).aspx // NOLINT(whitespace/line_length)
+    const DWORD access_flags = resolved_path_is_directory
+      ? FILE_FLAG_BACKUP_SEMANTICS
+      : FILE_ATTRIBUTE_NORMAL;
+
+    const HANDLE handle = ::CreateFileW(
+        absolute_path.data(),
+        GENERIC_READ,     // Open the file for reading only.
+        // Must pass in all SHARE flags below, in case file is already open.
+        // Otherwise, we may get an access denied error.
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr,          // Ignored.
+        OPEN_EXISTING,    // Open existing file.
+        access_flags,     // Open file, not the symlink itself.
+        nullptr);         // Ignored.
+
+    if (handle == INVALID_HANDLE_VALUE) {
+      return WindowsError();
+    }
+
+    return SharedHandle(handle, ::CloseHandle);
   }
-
-  bool resolved_path_is_directory = attributes.get() & FILE_ATTRIBUTE_DIRECTORY;
-
-  // NOTE: The name of `CreateFile` is misleading: it is also used to retrieve
-  // handles to existing files or directories as if it were actually `OpenPath`
-  // (which does not exist). We use `OPEN_EXISTING` but not
-  // `FILE_FLAG_OPEN_REPARSE_POINT` to explicitily follow (resolve) symlinks in
-  // the path to the file or directory.
-  //
-  // Note also that `CreateFile` will appropriately generate a handle for
-  // either a folder or a file, as long as the appropriate flag is being set:
-  // `FILE_FLAG_BACKUP_SEMANTICS`.
-  //
-  // The `FILE_FLAG_BACKUP_SEMANTICS` flag is being set whenever the target is
-  // a directory. According to MSDN[1]: "You must set this flag to obtain a
-  // handle to a directory. A directory handle can be passed to some functions
-  // instead of a file handle". More `FILE_FLAG_BACKUP_SEMANTICS` documentation
-  // can be found in MSDN[2].
-  //
-  // The `GENERIC_READ` flag is being used because it's the most common way of
-  // opening a file for reading only. The `SHARE` flags allow other processes
-  // to read the file at the same time, as well as allow this process to read
-  // files that were also opened with these flags. MSDN[1] provides a more
-  // detailed explanation of these flags.
-  //
-  // [1] https://msdn.microsoft.com/en-us/library/windows/desktop/aa363858(v=vs.85).aspx // NOLINT(whitespace/line_length)
-  // [2] https://msdn.microsoft.com/en-us/library/windows/desktop/aa364399(v=vs.85).aspx // NOLINT(whitespace/line_length)
-  const DWORD access_flags = resolved_path_is_directory
-    ? FILE_FLAG_BACKUP_SEMANTICS
-    : FILE_ATTRIBUTE_NORMAL;
-
-  const HANDLE handle = ::CreateFileW(
-      longpath(absolute_path).data(),
-      GENERIC_READ,     // Open the file for reading only.
-      // Must pass in all SHARE flags below, in case file is already open.
-      // Otherwise, we may get an access denied error.
-      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-      nullptr,          // Ignored.
-      OPEN_EXISTING,    // Open existing file.
-      access_flags,     // Open file, not the symlink itself.
-      nullptr);         // Ignored.
-
-  if (handle == INVALID_HANDLE_VALUE) {
-    return WindowsError();
-  }
-
-  return SharedHandle(handle, ::CloseHandle);
 }
 
 
 // Attempts to get a file or folder handle for an absolute path, and does not
 // follow symlinks. That is, if the path points at a symlink, the handle will
 // refer to the symlink rather than the file or folder the symlink points at.
-inline Try<SharedHandle> get_handle_no_follow(const std::string& absolute_path)
+template <typename T>
+inline Try<SharedHandle> get_handle_no_follow(T&& absolute_path)
 {
-  const Try<DWORD> attributes = get_file_attributes(longpath(absolute_path));
+  {
+    const std::wstring& absolute_path(longpath(std::forward<T>(absolute_path)));
+    const Try<DWORD> attributes = get_file_attributes(absolute_path);
 
-  if (attributes.isError()) {
-    return Error(attributes.error());
+    if (attributes.isError()) {
+      return Error(attributes.error());
+    }
+
+    bool resolved_path_is_directory = attributes.get() & FILE_ATTRIBUTE_DIRECTORY;
+
+    // NOTE: According to the `CreateFile` documentation[1], the `OPEN_EXISTING`
+    // and `FILE_FLAG_OPEN_REPARSE_POINT` flags need to be used when getting a
+    // handle for the symlink.
+    //
+    // Note also that `CreateFile` will appropriately generate a handle for
+    // either a folder or a file, as long as the appropriate flag is being set:
+    // `FILE_FLAG_BACKUP_SEMANTICS` or `FILE_FLAG_OPEN_REPARSE_POINT`.
+    //
+    // The `FILE_FLAG_BACKUP_SEMANTICS` flag is being set whenever the target is
+    // a directory. According to MSDN[1]: "You must set this flag to obtain a
+    // handle to a directory. A directory handle can be passed to some functions
+    // instead of a file handle". More `FILE_FLAG_BACKUP_SEMANTICS` documentation
+    // can be found in MSDN[2].
+    //
+    // The `GENERIC_READ` flag is being used because it's the most common way of
+    // opening a file for reading only. The `SHARE` flags allow other processes
+    // to read the file at the same time, as well as allow this process to read
+    // files that were also opened with these flags. MSDN[1] provides a more
+    // detailed explanation of these flags.
+    //
+    // [1] https://msdn.microsoft.com/en-us/library/windows/desktop/aa363858(v=vs.85).aspx // NOLINT(whitespace/line_length)
+    // [2] https://msdn.microsoft.com/en-us/library/windows/desktop/aa364399(v=vs.85).aspx // NOLINT(whitespace/line_length)
+    const DWORD access_flags = resolved_path_is_directory
+      ? (FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS)
+      : FILE_FLAG_OPEN_REPARSE_POINT;
+
+    const HANDLE handle = ::CreateFileW(
+        absolute_path.data(),
+        GENERIC_READ,     // Open the file for reading only.
+        // Must pass in all SHARE flags below, in case file is already open.
+        // Otherwise, we may get an access denied error.
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr,          // Ignored.
+        OPEN_EXISTING,    // Open existing symlink.
+        access_flags,     // Open symlink, not the file it points to.
+        nullptr);         // Ignored.
+
+    if (handle == INVALID_HANDLE_VALUE) {
+      return WindowsError();
+    }
+
+    return SharedHandle(handle, ::CloseHandle);
   }
-
-  bool resolved_path_is_directory = attributes.get() & FILE_ATTRIBUTE_DIRECTORY;
-
-  // NOTE: According to the `CreateFile` documentation[1], the `OPEN_EXISTING`
-  // and `FILE_FLAG_OPEN_REPARSE_POINT` flags need to be used when getting a
-  // handle for the symlink.
-  //
-  // Note also that `CreateFile` will appropriately generate a handle for
-  // either a folder or a file, as long as the appropriate flag is being set:
-  // `FILE_FLAG_BACKUP_SEMANTICS` or `FILE_FLAG_OPEN_REPARSE_POINT`.
-  //
-  // The `FILE_FLAG_BACKUP_SEMANTICS` flag is being set whenever the target is
-  // a directory. According to MSDN[1]: "You must set this flag to obtain a
-  // handle to a directory. A directory handle can be passed to some functions
-  // instead of a file handle". More `FILE_FLAG_BACKUP_SEMANTICS` documentation
-  // can be found in MSDN[2].
-  //
-  // The `GENERIC_READ` flag is being used because it's the most common way of
-  // opening a file for reading only. The `SHARE` flags allow other processes
-  // to read the file at the same time, as well as allow this process to read
-  // files that were also opened with these flags. MSDN[1] provides a more
-  // detailed explanation of these flags.
-  //
-  // [1] https://msdn.microsoft.com/en-us/library/windows/desktop/aa363858(v=vs.85).aspx // NOLINT(whitespace/line_length)
-  // [2] https://msdn.microsoft.com/en-us/library/windows/desktop/aa364399(v=vs.85).aspx // NOLINT(whitespace/line_length)
-  const DWORD access_flags = resolved_path_is_directory
-    ? (FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS)
-    : FILE_FLAG_OPEN_REPARSE_POINT;
-
-  const HANDLE handle = ::CreateFileW(
-      longpath(absolute_path).data(),
-      GENERIC_READ,     // Open the file for reading only.
-      // Must pass in all SHARE flags below, in case file is already open.
-      // Otherwise, we may get an access denied error.
-      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-      nullptr,          // Ignored.
-      OPEN_EXISTING,    // Open existing symlink.
-      access_flags,     // Open symlink, not the file it points to.
-      nullptr);         // Ignored.
-
-  if (handle == INVALID_HANDLE_VALUE) {
-    return WindowsError();
-  }
-
-  return SharedHandle(handle, ::CloseHandle);
 }
 
 
@@ -318,53 +331,58 @@ inline Try<SymbolicLink> get_symbolic_link_data(const HANDLE handle)
 // Creates a reparse point with the specified target. The target can be either
 // a file (in which case a junction is created), or a folder (in which case a
 // mount point is created).
+template <typename T1, typename T2>
 inline Try<Nothing> create_symbolic_link(
-    const std::string& target,
-    const std::string& reparse_point)
+    T1&& target,
+    T2&& reparse_point)
 {
-  // Determine if target is a folder or a file. This makes a difference
-  // in the way we call `create_symbolic_link`.
-  const Try<DWORD> attributes = get_file_attributes(longpath(target));
+  {
+    const std::wstring& target(longpath(std::forward<T1>(target)));
+    const std::wstring& reparse_point(longpath(std::forward<T2>(reparse_point)));
+    // Determine if target is a folder or a file. This makes a difference
+    // in the way we call `create_symbolic_link`.
+    const Try<DWORD> attributes = get_file_attributes(target);
 
-  bool target_is_folder = false;
-  if (attributes.isSome()) {
-    target_is_folder = attributes.get() & FILE_ATTRIBUTE_DIRECTORY;
-  }
+    bool target_is_folder = false;
+    if (attributes.isSome()) {
+      target_is_folder = attributes.get() & FILE_ATTRIBUTE_DIRECTORY;
+    }
 
-  // Bail out if target is already a reparse point.
-  Try<bool> attribute_set = reparse_point_attribute_set(longpath(target));
-  if (attribute_set.isSome() && attribute_set.get()) {
-    return Error("Path '" + target + "' is already a reparse point");
-  }
+    // Bail out if target is already a reparse point.
+    Try<bool> attribute_set = reparse_point_attribute_set(target);
+    if (attribute_set.isSome() && attribute_set.get()) {
+      return Error("Path '" + narrow_stringify(target) + "' is already a reparse point");
+    }
 
-  DWORD flags = target_is_folder ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0;
+    DWORD flags = target_is_folder ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0;
 
-  // Lambda to create symlink with given flags.
-  auto link = [&reparse_point, &target](const DWORD flags) {
-    return ::CreateSymbolicLinkW(
-        // Path to link.
-        longpath(reparse_point).data(),
-        // Path to target.
-        longpath(target).data(),
-        flags);
-  };
+    // Lambda to create symlink with given flags.
+    auto link = [&reparse_point, &target](const DWORD flags) {
+      return ::CreateSymbolicLinkW(
+          // Path to link.
+          reparse_point.data(),
+          // Path to target.
+          target.data(),
+          flags);
+    };
 
-  // `CreateSymbolicLink` normally adjusts the process token's privileges to
-  // allow for symlink creation; however, we explicitly avoid this with the
-  // following flag to not require administrative privileges.
-  if (link(flags | SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE)) {
-    return Nothing();
-  }
-
-  // If this failed because the non-symbolic link feature was not supported,
-  // try again without the feature. This is for legacy support.
-  if (::GetLastError() == ERROR_INVALID_PARAMETER) {
-    if (link(flags)) {
+    // `CreateSymbolicLink` normally adjusts the process token's privileges to
+    // allow for symlink creation; however, we explicitly avoid this with the
+    // following flag to not require administrative privileges.
+    if (link(flags | SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE)) {
       return Nothing();
     }
-  }
 
-  return WindowsError();
+    // If this failed because the non-symbolic link feature was not supported,
+    // try again without the feature. This is for legacy support.
+    if (::GetLastError() == ERROR_INVALID_PARAMETER) {
+      if (link(flags)) {
+        return Nothing();
+      }
+    }
+
+    return WindowsError();
+  }
 }
 
 } // namespace windows {

@@ -70,14 +70,13 @@ inline Try<std::string> nodename()
     }
   }
 
-  std::vector<wchar_t> buffer;
-  buffer.reserve(size);
+  std::vector<wchar_t> buffer(size);
 
   if (::GetComputerNameExW(format, buffer.data(), &size) == 0) {
     return WindowsError();
   }
 
-  return narrow_stringify(std::wstring(buffer.data()));
+  return narrow_stringify(buffer.data());
 }
 
 
@@ -595,13 +594,12 @@ inline Try<std::string> var()
         "os::var: `GetAllUsersProfileDirectoryW` succeeded unexpectedly");
   }
 
-  std::vector<wchar_t> buffer;
-  buffer.reserve(static_cast<size_t>(size));
+  std::vector<wchar_t> buffer(size);
   if (!::GetAllUsersProfileDirectoryW(buffer.data(), &size)) {
     return WindowsError("os::var: `GetAllUsersProfileDirectoryW` failed");
   }
 
-  return narrow_stringify(std::wstring(buffer.data()));
+  return narrow_stringify(buffer.data());
 }
 
 
