@@ -30,32 +30,36 @@
 
 namespace os {
 
-inline Try<Nothing> mkdir(const std::string& directory, bool recursive = true)
+template <typename T>
+inline Try<Nothing> mkdir(T&& path, bool recursive = true)
 {
+  const std::wstring& longpath(
+      ::internal::windows::longpath(std::forward<T>(path)));
   if (!recursive) {
     // NOTE: We check for existence because parts of certain directories
     // like `C:\` will return an error if passed to `CreateDirectory`,
     // even though the drive may already exist.
-    if (os::exists(directory)) {
+    if (os::exists(longpath)) {
       return Nothing();
     }
 
-    const std::wstring longpath = ::internal::windows::longpath(directory);
     if (::CreateDirectoryW(longpath.data(), nullptr) == 0) {
-      return WindowsError("Failed to create directory: " + directory);
+      return WindowsError("Failed to create directory: " +
+                          narrow_stringify(longpath));
     }
   } else {
     // Remove the long path prefix, if it already exists, otherwise the
     // tokenizer includes the long path prefix (`\\?\`) as the first part
     // of the path.
-    const std::vector<std::string> tokens = strings::tokenize(
-        strings::remove(directory, os::LONGPATH_PREFIX, strings::Mode::PREFIX),
-        stringify(os::PATH_SEPARATOR));
+    const std::vector<std::wstring> tokens = strings::tokenize(
+        strings::remove(longpath, os::W_LONGPATH_PREFIX,
+                        strings::Mode::PREFIX),
+        os::W_PATH_SEPARATOR);
 
-    std::string path;
+    std::wstring path;
 
-    foreach (const std::string& token, tokens) {
-      path += token + os::PATH_SEPARATOR;
+    foreach (const std::wstring& token, tokens) {
+      path += token + os::W_PATH_SEPARATOR;
       const Try<Nothing> result = mkdir(path, false);
       if (result.isError()) {
         return result;
