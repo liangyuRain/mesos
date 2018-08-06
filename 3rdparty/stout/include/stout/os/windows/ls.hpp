@@ -28,7 +28,7 @@ template <typename T>
 inline Try<std::list<std::string>> ls(T&& directory)
 {
   // Ensure the path ends with a backslash.
-  std::wstring path = utf_convert<wchar_t>(directory);
+  std::wstring path = string_convert<wchar_t>(directory);
   if (!strings::endsWith(path, L"\\")) {
     path += L"\\";
   }
@@ -44,7 +44,7 @@ inline Try<std::list<std::string>> ls(T&& directory)
 
   if (search_handle.get() == INVALID_HANDLE_VALUE) {
     return WindowsError("Failed to search '" +
-                        utf_convert<char>(directory) + "'");
+                        string_convert<char>(directory) + "'");
   }
 
   std::list<std::string> result;
