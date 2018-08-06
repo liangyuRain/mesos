@@ -186,20 +186,20 @@ std::string& e = stringify(str);         // Illegal, e must be const reference
 
 `wchar_t` and `std::wstring` work in the same way as `char` and `std::string` do.
 
-## `utf_convert`
+## `string_convert`
 
-`utf_convert` is similar to `stringify`. It accepts any argument `stringify`
+`string_convert` is similar to `stringify`. It accepts any argument `stringify`
 accepts but you must explicitly specify which type of string you want as a
 template argument. For example, to get a wide string out of `str`, we can do
-`utf_convert<wchar_t>(str)`. Note that the template argument is `wchar_t` but
+`string_convert<wchar_t>(str)`. Note that the template argument is `wchar_t` but
 not `std::wstring`, and `str` is not necessary to be narrow string.
 
-`utf_convert` is also implemented to avoid copy as possible. If the passed in
+`string_convert` is also implemented to avoid copy as possible. If the passed in
 type is already in the wanted string type, it also returns const reference as
 what `stringify` does.
 
-`narrow_stringify` is equivalent to `utf_convert<char>`, and `wide_stringify` is
-equivalent to `utf_convert<wchar_t>`.
+`narrow_stringify` is equivalent to `string_convert<char>`, and `wide_stringify` is
+equivalent to `string_convert<wchar_t>`.
 
 ## Guide for Writing String Functions
 
@@ -308,7 +308,7 @@ Nonetheless, developers should be explicit when using an API: use
 `::SetCurrentDirectoryW` over the ambiguous macro `::SetCurrentyDirectory`.
 
 When converting from `std::string` to `std::wstring`, do not reinvent the wheel!
-Use the `wide_stringify()` and `narrow_stringify()` or `utf_convert<T>()` functions
+Use the `wide_stringify()` and `narrow_stringify()` or `string_convert<T>()` functions
 from
 [`stringify.hpp`](https://github.com/apache/mesos/blob/master/3rdparty/stout/include/stout/stringify.hpp).
 

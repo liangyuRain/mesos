@@ -38,7 +38,7 @@ enum Mode
 };
 
 // `strings` functions support both `std::string` and `std::wstring`, as long
-// as all the parameters and return value are in the same UTF encoding.
+// as all the parameters and return value are in the same type of char.
 
 template <typename T1, typename T2>
 inline GET_TYPE(T1) remove(
@@ -117,7 +117,7 @@ inline GET_TYPE(T) trim(T&& from, Mode mode = ANY)
 {
   typedef GET_TYPE(T) STRING;
   return trim(std::forward<T>(from), mode,
-      utf_convert<typename STRING::value_type>(WHITESPACE));
+      string_convert<typename STRING::value_type>(WHITESPACE));
 }
 
 

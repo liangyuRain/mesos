@@ -86,7 +86,7 @@ struct convert_type<false, T1> {
 };
 
 
-// `stringify` will always preserve the UTF encoding. For example,
+// `stringify` will always preserve the type of char of string. For example,
 // `std::string`, `const char*`, and `char` are all convert to `std::string`,
 // and `std::wstring`, `const wchar_t*`, and `wchar_t` are all convert to
 // `std::wstring`.
@@ -126,7 +126,7 @@ inline std::basic_string<T> stringify(
 
 
 template <typename T1, typename T2>
-struct utf_convert__ {
+struct string_convert__ {
   std::basic_string<T1> operator()(const std::basic_string<T2>& str) {
     return std::basic_string<T1>(str.cbegin(), str.cend());
   }
@@ -135,7 +135,7 @@ struct utf_convert__ {
 
 #ifdef __WINDOWS__
 template <>
-struct utf_convert__<wchar_t, char> {
+struct string_convert__<wchar_t, char> {
   std::basic_string<wchar_t> operator()(const std::basic_string<char>& str) {
     // Convert UTF-8 `string` to UTF-16 `wstring`.
     static std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>
@@ -149,7 +149,7 @@ struct utf_convert__<wchar_t, char> {
 
 
 template <>
-struct utf_convert__<char, wchar_t> {
+struct string_convert__<char, wchar_t> {
   std::basic_string<char> operator()(const std::basic_string<wchar_t>& str) {
     // Convert UTF-16 `wstring` to UTF-8 `string`.
     static std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t>
@@ -174,17 +174,17 @@ struct convert_decide {
 
 
 template <typename T1, typename T2>
-struct utf_convert_ {
+struct string_convert_ {
   inline typename convert_decide<T1, T2&&>::type operator()(T2&& str) {
     typedef GET_TYPE(T2) STRING;
     typedef typename STRING::value_type CHAR;
-    return utf_convert__<T1, CHAR>()(stringify(std::forward<T2>(str)));
+    return string_convert__<T1, CHAR>()(stringify(std::forward<T2>(str)));
   }
 };
 
 
 template <typename T>
-struct utf_convert_<T, const std::basic_string<T>&> {
+struct string_convert_<T, const std::basic_string<T>&> {
   inline const std::basic_string<T>& operator()(
       const std::basic_string<T>& str) {
     return str;
@@ -193,7 +193,7 @@ struct utf_convert_<T, const std::basic_string<T>&> {
 
 
 template <typename T>
-struct utf_convert_<T, std::basic_string<T>&> {
+struct string_convert_<T, std::basic_string<T>&> {
   inline const std::basic_string<T>& operator()(
       std::basic_string<T>& str) {
     return str;
@@ -202,7 +202,7 @@ struct utf_convert_<T, std::basic_string<T>&> {
 
 
 template <typename T>
-struct utf_convert_<T, std::basic_string<T>&&> {
+struct string_convert_<T, std::basic_string<T>&&> {
   inline std::basic_string<T> operator()(
       std::basic_string<T>&& str) {
     return std::move(str);
@@ -210,32 +210,20 @@ struct utf_convert_<T, std::basic_string<T>&&> {
 };
 
 
-// `utf_convert` can accept any argument `stringify` accept, and it can also
-// change the UTF encoding by providing a single template parameter. For
+// `string_convert` can accept any argument `stringify` accept, and it can also
+// change the type of char by providing a single template parameter. For
 // example, to convert a C `char*` string to wide string:
 //
-//   std::wstring wstr = utf_convert<wchar_t>(cstr);
+//   std::wstring wstr = string_convert<wchar_t>(cstr);
 //
-// Like `stringify`, `utf_convert` is also designed to avoid copy as possible.
+// Like `stringify`, `string_convert` is also designed to avoid copy as possible.
 template <typename T1, typename T2>
-inline typename convert_decide<T1, T2&&>::type utf_convert(T2&& str) {
-  return utf_convert_<T1, T2&&>()(std::forward<T2>(str));
+inline typename convert_decide<T1, T2&&>::type string_convert(T2&& str) {
+  return string_convert_<T1, T2&&>()(std::forward<T2>(str));
 };
 
-
-template <typename T>
-inline typename convert_decide<char, T&&>::type narrow_stringify(T&& str)
-{
-  return utf_convert<char>(std::forward<T>(str));
-}
-
-
-template <typename T>
-inline typename convert_decide<wchar_t, T&&>::type wide_stringify(T&& str)
-{
-  return utf_convert<wchar_t>(std::forward<T>(str));
-}
-
+#define narrow_stringify(X) string_convert<char>(X)
+#define wide_stringify(X) string_convert<wchar_t>(X)
 
 inline std::string stringify(const bool& b)
 {

@@ -46,15 +46,15 @@ inline GET_TYPE(T) from_uri(T&& uri)
   // Remove the optional "file://" if it exists.
   // TODO(coffler): Remove the `hostname` component.
   const STRING path = strings::remove(std::forward<T>(uri),
-      utf_convert<typename STRING::value_type>("file://"),
+      string_convert<typename STRING::value_type>("file://"),
       strings::PREFIX);
 
 #ifndef __WINDOWS__
   return path;
 #else
   return strings::replace(path,
-      utf_convert<typename STRING::value_type>("/"),
-      utf_convert<typename STRING::value_type>("\\"));
+      string_convert<typename STRING::value_type>("/"),
+      string_convert<typename STRING::value_type>("\\"));
 #endif // __WINDOWS__
 }
 
@@ -68,7 +68,7 @@ inline GET_TYPE(T1) join(
 {
   typedef GET_TYPE(T1) STRING;
   const STRING separator =
-      utf_convert<typename STRING::value_type>(_separator);
+      string_convert<typename STRING::value_type>(_separator);
   return strings::remove(std::forward<T1>(path1), separator, strings::SUFFIX) +
          separator +
          strings::remove(std::forward<T2>(path2), separator, strings::PREFIX);
@@ -124,7 +124,7 @@ inline bool absolute(T&& path)
   const STRING& path_str(stringify(std::forward<T>(path)));
 #ifndef __WINDOWS__
   return strings::startsWith(path_str,
-      utf_convert<typename STRING::value_type>(os::PATH_SEPARATOR));
+      string_convert<typename STRING::value_type>(os::PATH_SEPARATOR));
 #else
   // NOTE: We do not use `PathIsRelative` Windows utility function
   // here because it does not support long paths.
@@ -142,7 +142,7 @@ inline bool absolute(T&& path)
   // A uniform naming convention (UNC) name of any format,
   // always starts with two backslash characters.
   if (strings::startsWith(path_str,
-      utf_convert<typename STRING::value_type>("\\\\"))) {
+      string_convert<typename STRING::value_type>("\\\\"))) {
     return true;
   }
 
@@ -158,8 +158,8 @@ inline bool absolute(T&& path)
   }
 
   STRING colon = path_str.substr(1, 2);
-  return colon == utf_convert<typename STRING::value_type>(":\\") ||
-      colon == utf_convert<typename STRING::value_type>(":/");
+  return colon == string_convert<typename STRING::value_type>(":\\") ||
+      colon == string_convert<typename STRING::value_type>(":/");
 #endif // __WINDOWS__
 }
 
@@ -182,7 +182,7 @@ public:
       const std::basic_string<T>& path,
       const T path_separator = (T) os::PATH_SEPARATOR)
     : value(strings::remove(path,
-                            utf_convert<T>("file://"),
+                            string_convert<T>("file://"),
                             strings::PREFIX)),
       separator(path_separator)
   {}
@@ -216,7 +216,7 @@ public:
   inline std::basic_string<T> basename() const
   {
     if (value.empty()) {
-      return utf_convert<T>(".");
+      return string_convert<T>(".");
     }
 
     size_t end = value.size() - 1;
@@ -275,7 +275,7 @@ public:
   inline std::basic_string<T> dirname() const
   {
     if (value.empty()) {
-      return utf_convert<T>(".");
+      return string_convert<T>(".");
     }
 
     size_t end = value.size() - 1;
@@ -290,7 +290,7 @@ public:
 
     // Paths containing no slashes result in ".".
     if (end == std::basic_string<T>::npos) {
-      return utf_convert<T>(".");
+      return string_convert<T>(".");
     }
 
     // Paths containing only slashes result in "/".
@@ -332,8 +332,8 @@ public:
     std::basic_string<T> _basename = basename();
     size_t index = _basename.rfind((T) '.');
 
-    if (_basename == utf_convert<T>(".") ||
-        _basename == utf_convert<T>("..") ||
+    if (_basename == string_convert<T>(".") ||
+        _basename == string_convert<T>("..") ||
         index == std::basic_string<T>::npos) {
       return None();
     }
