@@ -65,22 +65,58 @@ process::Future<Nothing> untar(
 
 
 #ifdef __WINDOWS__
+/* Using wclayer from https://github.com/microsoft/hcsshim */
+
 /**
- * Windows way of extracting file layers
+ * creates a new writable container layer
+ * 
+ * @param directory layer path
+ * @param layers paths to the read-only parent layers
+ */ 
+process::Future<Nothing> wclayer_create(
+    const Path& directory, const std::vector<Path>& layers);
+
+
+/**
+ * exports a layer to a tar file
+ * 
+ * @param directory layer path
+ * @param layers paths to the read-only parent layers
+ * @param output output layer tar
+ * @param compress output with gzip compression
+ */
+process::Future<Nothing> wclayer_export(
+    const Path& directory,
+    const std::vector<Path>& layers,
+    const Path& output,
+    bool gzip = false);
+
+
+/**
+ * imports a layer from a tar file
  *
- * @param input path to the downloaded compressed layer file
- * @param layers list of paths to extracted parent layers [base, ...]
- * @param directory path to extract the compressed layer
+ * @param directory path
+ * @param input input layer tar
+ * @param layers paths to the read-only parent layers [base, ...]
  */
 process::Future<Nothing> wclayer_import(
-    const Path& input, const std::vector<Path>& layers, const Path& directory);
+    const Path& directory, const Path& input, const std::vector<Path>& layers);
 
 
 /**
- * Windows way of removing downloaded compressed layer file. The file can only
- * be removed by wclayer because of special authorization.
+ * mounts a scratch
+ * 
+ * @param scratch scratch path
+ * @param layers paths to the parent layers for this layer
+ */
+process::Future<Nothing> wclayer_mount(
+    const Path& scratch, const std::vector<Path>& layers);
+
+
+/**
+ * permanently removes a layer directory in its entirety
  *
- * @param directory path to remove
+ * @param directory layer path
  */
 process::Future<Nothing> wclayer_remove(const Path& directory);
 #endif // __WINDOWS__

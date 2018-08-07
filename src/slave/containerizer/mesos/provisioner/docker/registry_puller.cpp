@@ -436,7 +436,7 @@ Future<vector<string>> RegistryPullerProcess::___pull(
     auto tar = tarPaths.crbegin();
     auto rootfs = layerPaths->crbegin();
     future = command::wclayer_import(
-        *tar, vector<Path>(layerPaths->crbegin(), rootfs), *rootfs);
+        *rootfs, *tar, vector<Path>(layerPaths->crbegin(), rootfs));
     ++tar;
     ++rootfs;
 
@@ -444,7 +444,7 @@ Future<vector<string>> RegistryPullerProcess::___pull(
       Path tarPath = *tar;
       future = future.then([=]() {
         return command::wclayer_import(
-            tarPath, vector<Path>(layerPaths->crbegin(), rootfs), *rootfs);
+            *rootfs, tarPath, vector<Path>(layerPaths->crbegin(), rootfs));
       });
     }
   } else {
