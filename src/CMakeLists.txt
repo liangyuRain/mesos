@@ -176,6 +176,7 @@ set(AGENT_SRC
   slave/containerizer/mesos/provisioner/appc/paths.cpp
   slave/containerizer/mesos/provisioner/appc/store.cpp
   slave/containerizer/mesos/provisioner/backends/copy.cpp
+  slave/containerizer/mesos/provisioner/backends/wclayer.cpp
   slave/containerizer/mesos/provisioner/docker/image_tar_puller.cpp
   slave/containerizer/mesos/provisioner/docker/metadata_manager.cpp
   slave/containerizer/mesos/provisioner/docker/paths.cpp
