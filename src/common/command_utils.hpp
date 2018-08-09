@@ -71,7 +71,8 @@ process::Future<Nothing> untar(
  * creates a new writable container layer
  * 
  * @param directory layer path
- * @param layers paths to the read-only parent layers
+ * @param layers paths to the read-only parent layers, the order of the layers
+ * matters with base layer should be the last one
  */ 
 process::Future<Nothing> wclayer_create(
     const Path& directory, const std::vector<Path>& layers);
@@ -81,7 +82,8 @@ process::Future<Nothing> wclayer_create(
  * exports a layer to a tar file
  * 
  * @param directory layer path
- * @param layers paths to the read-only parent layers
+ * @param layers paths to the read-only parent layers, the order of the layers
+ * matters with base layer should be the last one
  * @param output output layer tar
  * @param compress output with gzip compression
  */
@@ -97,7 +99,8 @@ process::Future<Nothing> wclayer_export(
  *
  * @param directory path
  * @param input input layer tar
- * @param layers paths to the read-only parent layers [base, ...]
+ * @param layers paths to the read-only parent layers, the order of the layers
+ * matters with base layer should be the last one
  */
 process::Future<Nothing> wclayer_import(
     const Path& directory, const Path& input, const std::vector<Path>& layers);
@@ -107,7 +110,8 @@ process::Future<Nothing> wclayer_import(
  * mounts a scratch
  * 
  * @param scratch scratch path
- * @param layers paths to the parent layers for this layer
+ * @param layers paths to the read-only parent layers, the order of the layers
+ * matters with base layer should be the last one
  */
 process::Future<Nothing> wclayer_mount(
     const Path& scratch, const std::vector<Path>& layers);
