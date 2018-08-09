@@ -14,24 +14,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef __MESOS_PROVISIONER_CONSTANTS_HPP__
-#define __MESOS_PROVISIONER_CONSTANTS_HPP__
+#ifndef __MESOS_PROVISIONER_WCLAYER_HPP__
+#define __MESOS_PROVISIONER_WCLAYER_HPP__
+
+#include "slave/containerizer/mesos/provisioner/backend.hpp"
 
 namespace mesos {
 namespace internal {
 namespace slave {
 
-// Provisioner backends.
-constexpr char AUFS_BACKEND[] = "aufs";
-constexpr char BIND_BACKEND[] = "bind";
-constexpr char COPY_BACKEND[] = "copy";
-constexpr char OVERLAY_BACKEND[] = "overlay";
-#ifdef __WINDOWS__
-constexpr char WCLAYER_BACKEND[] = "wclayer";
-#endif // __WINDOWS__
+// Forward declaration.
+class WclayerBackendProcess;
+
+
+class WclayerBackend : public Backend
+{
+public:
+  ~WclayerBackend() override;
+
+  static Try<process::Owned<Backend>> create(const Flags&);
+
+  process::Future<Nothing> provision(
+      const std::vector<std::string>& layers,
+      const std::string& rootfs,
+      const std::string& backendDir) override;
+
+  process::Future<bool> destroy(
+      const std::string& rootfs,
+      const std::string& backendDir) override;
+
+private:
+  explicit WclayerBackend(process::Owned<WclayerBackendProcess> process);
+
+  WclayerBackend(const WclayerBackend&);
+  WclayerBackend& operator=(const WclayerBackend&);
+
+  process::Owned<WclayerBackendProcess> process;
+};
 
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {
 
-#endif  // __MESOS_PROVISIONER_CONSTANTS_HPP__
+#endif // __MESOS_PROVISIONER_WCLAYER_HPP__
