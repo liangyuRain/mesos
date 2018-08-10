@@ -254,6 +254,13 @@ Future<Nothing> wclayer_remove(const Path& directory)
 
   return launch("wclayer", argv).then([]() { return Nothing(); });
 }
+
+
+Future<Nothing> wclayer_unmount(const Path& directory) {
+  vector<string> argv = {"wclayer", "unmount", directory};
+
+  return launch("wclayer", argv).then([]() { return Nothing(); });
+}
 #endif // __WINDOWS__
 
 

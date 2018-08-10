@@ -123,6 +123,14 @@ process::Future<Nothing> wclayer_mount(
  * @param directory layer path
  */
 process::Future<Nothing> wclayer_remove(const Path& directory);
+
+
+/**
+ * unmounts a scratch
+ * 
+ * @param directory layer path
+ */
+process::Future<Nothing> wclayer_unmount(const Path& directory);
 #endif // __WINDOWS__
 
 
