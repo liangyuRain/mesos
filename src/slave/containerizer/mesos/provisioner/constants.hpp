@@ -26,6 +26,9 @@ constexpr char AUFS_BACKEND[] = "aufs";
 constexpr char BIND_BACKEND[] = "bind";
 constexpr char COPY_BACKEND[] = "copy";
 constexpr char OVERLAY_BACKEND[] = "overlay";
+#ifdef __WINDOWS__
+constexpr char WCLAYER_BACKEND[] = "wclayer";
+#endif // __WINDOWS__
 
 } // namespace slave {
 } // namespace internal {

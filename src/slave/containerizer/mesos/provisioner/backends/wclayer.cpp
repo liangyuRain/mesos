@@ -13,19 +13,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+#include <process/defer.hpp>
 #include <process/dispatch.hpp>
 #include <process/id.hpp>
 #include <process/process.hpp>
 
-#include <stout/adaptor.hpp>
-#include <stout/foreach.hpp>
-#include <stout/fs.hpp>
-#include <stout/os.hpp>
-
-#include <stout/os/realpath.hpp>
-
-#include "linux/fs.hpp"
+#include "common/command_utils.hpp"
 
 #include "slave/containerizer/mesos/provisioner/backends/wclayer.hpp"
 
@@ -60,6 +53,9 @@ public:
   Future<bool> destroy(
       const string& rootfs,
       const string& backendDir);
+
+private:
+  Future<bool> _destroy(const string& rootfs);
 };
 
 
@@ -133,8 +129,10 @@ Future<Nothing> WclayerBackendProcess::provision(
   // `wclayer_create` and `wclayer_mount`, so we need to reverse the order.
   vector<Path> rlayers(layers.rbegin(), layers.rend());
 
-  return command::wclayer_create(scratchDir, rlayers)
-    .then(defer(self(), &command::wclayer_mount(scratchDir, rlayers)));
+  return command::wclayer_create(Path(scratchDir), rlayers)
+    .then(defer(self(), [=]() -> Future<Nothing> {
+      return command::wclayer_mount(Path(scratchDir), rlayers);
+    }));
 }
 
 
@@ -144,16 +142,32 @@ Future<bool> WclayerBackendProcess::destroy(
 {
   const string rootfsId = Path(rootfs).basename();
   const string scratchDir = path::join(backendDir, "scratch", rootfsId);
+
+  return true;
   
   // TODO: Did not check whether ths directory is mounted or not.
-  Future<Nothing> unmount = command::wclayer_unmount(scratchDir);
-  unmount.await();
-  if (unmount.isFailed()) {
-    VLOG(1) << "Failed to unmount scratch directory '" << scratchDir << "': "
-            << unmount.Failure();
-  }
+  return command::wclayer_unmount(Path(scratchDir))
+    .recover(defer(self(), [=](const Future<Nothing>& f) -> Future<Nothing> {
+      VLOG(1) << "Failed to unmount scratch directory '" << scratchDir
+              << "': " << f.failure();
+      return Nothing();
+    }))
+    .then(defer(self(), [=](const Future<Nothing>&) -> Future<bool> {
+      return _destroy(rootfs);
+    }));
+}
 
-  
+Future<bool> WclayerBackendProcess::_destroy(const string& rootfs)
+{
+  return command::wclayer_remove(Path(rootfs))
+    .recover(defer(self(), [=](const Future<Nothing>& f) -> Future<Nothing> {
+        return Failure(
+            "Failed to remove rootfs mount point '" + rootfs +
+            "': " + f.failure());
+    }))
+    .then(defer(self(), [](const Future<Nothing>&) -> Future<bool> {
+      return true;
+    }));
 }
 
 } // namespace slave {
