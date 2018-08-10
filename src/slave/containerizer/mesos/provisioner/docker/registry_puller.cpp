@@ -434,17 +434,17 @@ Future<vector<string>> RegistryPullerProcess::___pull(
   // layers for each wclayer call.
   if (!tarPaths.empty()) {
     auto tar = tarPaths.crbegin();
-    auto rootfs = layerPaths->crbegin();
+    auto rootfs = layerPaths->cend();
     future = command::wclayer_import(
-        *tar, vector<Path>(layerPaths->crbegin(), rootfs), *rootfs);
+        *tar, vector<Path>(layerPaths->cend(), rootfs), *rootfs);
     ++tar;
-    ++rootfs;
+    --rootfs;
 
-    for (; tar < tarPaths.crend(); ++tar, ++rootfs) {
+    for (; tar < tarPaths.crend(); ++tar, --rootfs) {
       Path tarPath = *tar;
       future = future.then([=]() {
         return command::wclayer_import(
-            tarPath, vector<Path>(layerPaths->crbegin(), rootfs), *rootfs);
+            tarPath, vector<Path>(layerPaths->cend(), rootfs), *rootfs);
       });
     }
   } else {
