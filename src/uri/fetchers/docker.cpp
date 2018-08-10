@@ -478,7 +478,7 @@ private:
       const http::Headers& basicAuthHeaders);
 
   Future<Nothing> onFetchBlobFailure(
-      const Future<Nothing> f,
+      const Future<Nothing>& f,
       const URI& blobUri,
       vector<string> urls,
       const string& directory,
@@ -990,7 +990,7 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
 
 
 Future<Nothing> DockerFetcherPluginProcess::onFetchBlobFailure(
-  const Future<Nothing> f,
+  const Future<Nothing>& f,
   const URI& blobUri,
   vector<string> urls,
   const string& directory,
