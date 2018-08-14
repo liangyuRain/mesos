@@ -126,6 +126,8 @@ static Future<http::Response> curl(
 
   argv.push_back(strings::trim(uri));
 
+  LOG(INFO) << "curl: " << strings::join(' ', argv);
+
   // TODO(jieyu): Kill the process if discard is called.
   Try<Subprocess> s = subprocess(
       "curl",
@@ -256,6 +258,8 @@ static Future<int> download(
   }
 
   argv.push_back(uri);
+
+  LOG(INFO) << "download: " << strings::join(' ', argv);
 
   // TODO(jieyu): Kill the process if discard is called.
   Try<Subprocess> s = subprocess(
