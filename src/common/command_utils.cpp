@@ -184,7 +184,7 @@ Future<Nothing> wclayer_create(
   }
 
   argv.emplace_back(directory);
-
+  LOG(INFO) << strings::join(' ', argv);
   return launch("wclayer", argv).then([]() { return Nothing(); });
 }
 
@@ -212,7 +212,7 @@ Future<Nothing> wclayer_export(
   }
 
   argv.emplace_back(directory);
-
+  LOG(INFO) << strings::join(' ', argv);
   return launch("wclayer", argv).then([]() { return Nothing(); });
 }
 
@@ -232,7 +232,7 @@ Future<Nothing> wclayer_import(
   }
 
   argv.emplace_back(directory);
-
+  LOG(INFO) << strings::join(' ', argv);
   return launch("wclayer", argv).then([]() { return Nothing(); });
 }
 
@@ -251,7 +251,7 @@ Future<Nothing> wclayer_mount(
   }
 
   argv.emplace_back(scratch);
-
+  LOG(INFO) << strings::join(' ', argv);
   return launch("wclayer", argv).then([]() { return Nothing(); });
 }
 
@@ -260,6 +260,7 @@ Future<Nothing> wclayer_remove(const Path& directory)
 {
   vector<string> argv = {"wclayer", "remove", directory};
 
+  LOG(INFO) << strings::join(' ', argv);
   return launch("wclayer", argv).then([]() { return Nothing(); });
 }
 
@@ -268,6 +269,7 @@ Future<Nothing> wclayer_unmount(const Path& directory)
 {
   vector<string> argv = {"wclayer", "unmount", directory};
 
+  LOG(INFO) << strings::join(' ', argv);
   return launch("wclayer", argv).then([]() { return Nothing(); });
 }
 #endif // __WINDOWS__
