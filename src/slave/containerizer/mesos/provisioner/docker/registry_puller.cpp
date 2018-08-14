@@ -436,16 +436,16 @@ Future<vector<string>> RegistryPullerProcess::___pull(
     auto tar = tarPaths.crbegin();
     auto rootfs = layerPaths->cend() - 1;
     future = command::wclayer_import(
-        Path(path::replaceColon(*tar)), vector<Path>(), *rootfs);
+        Path(*rootfs, path::replaceColon(*tar)), vector<Path>());
     ++tar;
     for (; tar < tarPaths.crend(); ++tar) {
       Path tarPath = *tar;
       --rootfs;
       future = future.then([=]() {
         return command::wclayer_import(
+            *rootfs,
             Path(path::replaceColon(tarPath)),
-            vector<Path>(rootfs + 1, layerPaths->cend()),
-            *rootfs);
+            vector<Path>(rootfs + 1, layerPaths->cend()));
       });
     }
   } else {
