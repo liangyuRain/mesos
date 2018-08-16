@@ -140,21 +140,24 @@ inline bool absolute(const std::string& path)
 
 #ifdef __WINDOWS__
 // This function is particularly used to replace the colons in SHA256 blobsum
-// when using the blobsum as filename in Windows, simply because colon is not
-// allowed in Windows path.
-inline std::string replaceColon(const std::string path, char ch = '_')
+// when using the blobsum as filename in Windows, because colon is not allowed
+// in Windows path.
+inline std::string replaceColon(std::string path, char ch = '_')
 {
-  std::vector<std::string> parts = strings::split(path, ':');
-  std::stringstream stream;
-  auto it = parts.cbegin();
+  int i = 0;
+
+  // The colon in disk designator is preserved.
   if (absolute(path)) {
-    stream << *it++;
-    stream << ':' << *it++;
+    i = path.find_first_of(':') + 1;
   }
-  while (it != parts.cend()) {
-    stream << ch << *it++;
+
+  for (; i < path.size(); ++i) {
+    if (path[i] == ':') {
+      path[i] = ch;
+    }
   }
-  return stream.str();
+
+  return path;
 }
 #endif // __WINDOWS__
 
