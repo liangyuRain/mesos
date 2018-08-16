@@ -223,15 +223,19 @@ static Future<http::Response> curl(
 // TODO(jieyu): Add a comment here.
 static Future<int> download(
     const string& _uri,
-    const string& blobPath,
+    const string& _blobPath,
     const http::Headers& headers,
     const Option<Duration>& stallTimeout)
 {
 #ifdef __WINDOWS__
   // Replace all '\' to '/'.
   const string uri = strings::replace(_uri, "\\", "/");
+
+  // Replace any illegal ':' with '_'
+  const string blobPath = path::replaceColon(_blobPath);
 #else
   const string& uri = _uri;
+  const string& blobPath = _blobPath;
 #endif // __WINDOWS__
 
   vector<string> argv = {
