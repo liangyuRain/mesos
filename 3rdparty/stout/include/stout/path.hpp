@@ -17,6 +17,10 @@
 #include <utility>
 #include <vector>
 
+#ifdef __WINDOWS__
+#include <sstream>
+#endif
+
 #include <stout/stringify.hpp>
 #include <stout/strings.hpp>
 
@@ -132,6 +136,27 @@ inline bool absolute(const std::string& path)
   return colon == ":\\" || colon == ":/";
 #endif // __WINDOWS__
 }
+
+
+#ifdef __WINDOWS__
+// This function is particularly used to replace the colons in SHA256 blobsum
+// when using the blobsum as filename in Windows, simply because colon is not
+// allowed in Windows path.
+inline std::string replaceColon(const std::string path, char ch = '_')
+{
+  std::vector<std::string> parts = strings::split(path, ':');
+  std::stringstream stream;
+  auto it = parts.cbegin();
+  if (absolute(path)) {
+    stream << *it++;
+    stream << ':' << *it++;
+  }
+  while (it != parts.cend()) {
+    stream << ch << *it++;
+  }
+  return stream.str();
+}
+#endif // __WINDOWS__
 
 } // namespace path {
 
