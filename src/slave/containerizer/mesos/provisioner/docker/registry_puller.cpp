@@ -430,19 +430,25 @@ Future<vector<string>> RegistryPullerProcess::___pull(
 #ifdef __WINDOWS__
   // Both `tarPaths` and `layerPaths` have their last element belongs to base.
   //
+  // Becuase blobSum contains ':' which is illegal in Windows path, we replace
+  // it with `_`. This is consistent with DockerFetcher.
+  //
   // Inefficient O(n^2) if number of layers is huge due to copying a range of
   // layers for each wclayer call.
   if (!tarPaths.empty()) {
     auto tar = tarPaths.crbegin();
     auto rootfs = layerPaths->cend() - 1;
-    future = command::wclayer_import(*tar, vector<Path>(), *rootfs);
+    future = command::wclayer_import(
+        Path(path::replaceColon(*tar)), vector<Path>(), *rootfs);
     ++tar;
     for (; tar < tarPaths.crend(); ++tar) {
       Path tarPath = *tar;
       --rootfs;
       future = future.then([=]() {
         return command::wclayer_import(
-            tarPath, vector<Path>(rootfs + 1, layerPaths->cend()), *rootfs);
+            Path(path::replaceColon(tarPath)), 
+            vector<Path>(rootfs + 1, layerPaths->cend()),
+            *rootfs);
       });
     }
   } else {
@@ -455,7 +461,7 @@ Future<vector<string>> RegistryPullerProcess::___pull(
     .then([=]() -> Future<vector<string>> {
       // Remove the tarballs after the extraction.
       foreach (const string& blobSum, blobSums) {
-        const string tar = path::join(directory, blobSum);
+        const string tar = path::replaceColon(path::join(directory, blobSum));
 
         Try<Nothing> rm = os::rm(tar);
         if (rm.isError()) {
