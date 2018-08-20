@@ -14,6 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <memory>
+
 #include <glog/logging.h>
 
 #include <mesos/secret/resolver.hpp>
@@ -38,6 +40,7 @@
 namespace http = process::http;
 namespace spec = docker::spec;
 
+using std::shared_ptr;
 using std::string;
 using std::vector;
 
