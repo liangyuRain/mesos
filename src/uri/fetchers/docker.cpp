@@ -760,9 +760,14 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
 #ifdef __WINDOWS__
   URI manifestUri = getManifestUri(uri);
 
+  // Fetching version 2 schema 2 manifest:
+  // https://docs.docker.com/registry/spec/manifest-v2-2/
+  //
+  // If fetch is failed, program continues without schema 2 manifest.
   http::Headers s2ManifestHeaders = {
     {"Accept", "application/vnd.docker.distribution.manifest.v2+json"}
   };
+
   return curl(manifestUri, s2ManifestHeaders + authHeaders, stallTimeout)
       .onAny(defer(self(), [=](const Future<http::Response>& f)
           -> Future<Nothing> {
