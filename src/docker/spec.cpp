@@ -346,15 +346,35 @@ namespace v2_2 {
 
 Option<Error> validate(const ImageManifest& manifest)
 {
+  // Validate required fields are present,
+  // e.g., repeated fields that has to be >= 1.
+  if (manifest.layers_size() <= 0) {
+    return Error("'layers' field size must be at least one");
+  }
+
+  // Verify 'config' field.
+  if (!strings::contains(manifest.config().digest(), ":")) {
+    return Error("Incorrect 'digest' format: " + manifest.config().digest());
+  }
+
+  // Verify 'layers' field.
+  for (int i = 0; i < manifest.layers_size(); ++i) {
+    if (!strings::contains(manifest.layers(i).digest(), ":")) {
+      return Error("Incorrect 'digest' format: " + manifest.layers(i).digest());
+    }
+  }
+
   if (manifest.schemaversion() != 2) {
     return Error("'schemaVersion' field must be 2");
   }
+  
   if (manifest.mediatype() !=
       "application/vnd.docker.distribution.manifest.v2+json") {
     return Error(
         "'mediaType' field must be "
         "'application/vnd.docker.distribution.manifest.v2+json'");
   }
+
   return None();
 }
 
