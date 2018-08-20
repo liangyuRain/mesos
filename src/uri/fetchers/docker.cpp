@@ -973,13 +973,13 @@ Future<Nothing> DockerFetcherPluginProcess::urlFetchBlob(
 {
   Try<string> _manifest = os::read(path::join(directory, "manifest_v2s2"));
   if (_manifest.isError()) {
-    VLOG(1) << "Scheme 2 manifest does not exist";
+    VLOG(1) << "Schema 2 manifest does not exist";
     return failure;
   }
 
   Try<spec::v2_2::ImageManifest> manifest = spec::v2_2::parse(_manifest.get());
   if (manifest.isError()) {
-    VLOG(1) << "Failed to parse the scheme 2 manifest: "
+    VLOG(1) << "Failed to parse the schema 2 manifest: "
             << manifest.error();
     return failure;
   }
@@ -995,7 +995,7 @@ Future<Nothing> DockerFetcherPluginProcess::urlFetchBlob(
     }
   }
   if (urls.empty()) {
-    VLOG(1) << "No foreign url found from scheme 2 manifest";
+    VLOG(1) << "No foreign url found from schema 2 manifest";
     return failure;
   }
 
