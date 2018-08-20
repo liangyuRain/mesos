@@ -886,7 +886,14 @@ Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
         return _fetchBlob(uri, directory, blobUri, authHeaders);
       }
 
-      return __fetchBlob(code);
+      return __fetchBlob(code)
+          .recover(defer(self(),
+                         &Self::urlFetchBlob,
+                         uri,
+                         directory,
+                         blobUri,
+                         authHeaders,
+                         lambda::_1));
     }));
 }
 
