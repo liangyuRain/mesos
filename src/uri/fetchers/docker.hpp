@@ -47,6 +47,10 @@ public:
 
   static Try<process::Owned<Fetcher::Plugin>> create(const Flags& flags);
 
+  static std::string getTarPath(
+      const std::string& directory,
+      const std::string& blobSum);
+
   ~DockerFetcherPlugin() override;
 
   std::set<std::string> schemes() const override;
