@@ -469,6 +469,15 @@ private:
       const string& directory,
       const http::Headers& authHeaders);
 
+  Future<Nothing> _fetchBlob(
+      const URI& uri,
+      const string& directory,
+      const URI& blobUri,
+      const http::Headers& basicAuthHeaders);
+
+  Future<Nothing> __fetchBlob(int code);
+
+#ifdef __WINDOWS__
   Future<Nothing> urlFetchBlob(
       const URI& uri,
       const string& directory,
@@ -482,14 +491,7 @@ private:
       const http::Headers& authHeaders,
       vector<string> urls,
       const Future<int>& code);
-
-  Future<Nothing> _fetchBlob(
-      const URI& uri,
-      const string& directory,
-      const URI& blobUri,
-      const http::Headers& basicAuthHeaders);
-
-  Future<Nothing> __fetchBlob(int code);
+#endif
 
   // Returns a token-based authorization header. Basic authorization
   // header may be required to get a proper authorization token.
@@ -887,13 +889,16 @@ Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
       }
 
       return __fetchBlob(code)
+#ifdef __WINDOWS__
           .recover(defer(self(),
                          &Self::urlFetchBlob,
                          uri,
                          directory,
                          blobUri,
                          authHeaders,
-                         lambda::_1));
+                         lambda::_1))
+#endif
+          ;
     }));
 }
 
@@ -925,13 +930,16 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
             .then(defer(self(),
                         &Self::__fetchBlob,
                         lambda::_1))
+#ifdef __WINDOWS__
             .recover(defer(self(),
                            &Self::urlFetchBlob,
                            uri,
                            directory,
                            blobUri,
                            authHeaders,
-                           lambda::_1));
+                           lambda::_1))
+#endif
+            ;
         }));
     }));
 }
@@ -949,6 +957,7 @@ Future<Nothing> DockerFetcherPluginProcess::__fetchBlob(int code)
 }
 
 
+#ifdef __WINDOWS__
 Future<Nothing> DockerFetcherPluginProcess::urlFetchBlob(
       const URI& uri,
       const string& directory,
@@ -1032,6 +1041,7 @@ Future<Nothing> DockerFetcherPluginProcess::_urlFetchBlob(
     }
   }
 }
+#endif
 
 
 Future<http::Headers> DockerFetcherPluginProcess::getAuthHeader(
