@@ -352,6 +352,7 @@ static Future<int> download(
 }
 
 
+#ifdef __WINDOWS__
 static Future<int> download(
     const URI& uri,
     const string& url,
@@ -362,6 +363,7 @@ static Future<int> download(
   const string blobPath = path::join(directory, Path(uri.path()).basename());
   return download(url, blobPath, headers, stallTimeout);
 }
+#endif
 
 
 // Returns the 'Basic' credential as a header for pulling an image
