@@ -1025,6 +1025,7 @@ Future<Nothing> DockerFetcherPluginProcess::_urlFetchBlob(
       vector<string> urls,
       const Future<int>& code)
 {
+  // The fetch is successful as long as any one of the urls works.
   if (code.isReady() && code.get() == http::Status::OK) {
     return Nothing();
   } else {
