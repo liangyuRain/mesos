@@ -1014,6 +1014,7 @@ Future<Nothing> DockerFetcherPluginProcess::urlFetchBlob(
                    authHeaders,
                    urls,
                    lambda::_1))
+      // `then` is used to comply return type `Future<Nothing>`.
       .then(defer(self(), []() { return Nothing(); }));
 }
 
@@ -1048,6 +1049,7 @@ Future<Nothing> DockerFetcherPluginProcess::_urlFetchBlob(
                        authHeaders,
                        urls,
                        lambda::_1))
+          // `then` is used to comply return type `Future<Nothing>`.
           .then(defer(self(), []() { return Nothing(); }));
     } else {
       return Failure("Failed to fetch with foreign urls");
