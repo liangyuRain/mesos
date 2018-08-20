@@ -940,7 +940,7 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
                            directory,
                            blobUri,
                            authHeaders,
-                           lambda::_1))
+                           lambda::_1));
 #else
             .then(defer(self(),
                         &Self::__fetchBlob,
