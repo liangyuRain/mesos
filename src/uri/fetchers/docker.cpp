@@ -352,6 +352,18 @@ static Future<int> download(
 }
 
 
+static Future<int> download(
+    const URI& uri,
+    const string& url,
+    const string& directory,
+    const http::Headers& headers,
+    const Option<Duration>& stallTimeout)
+{
+  const string blobPath = path::join(directory, Path(uri.path()).basename());
+  return download(url, blobPath, headers, stallTimeout);
+}
+
+
 // Returns the 'Basic' credential as a header for pulling an image
 // from a registry, if the host of the image's repository exists in
 // the docker config file, or empty if there is none.
@@ -464,6 +476,22 @@ private:
       const http::Headers& basicAuthHeaders);
 
   Future<Nothing> __fetchBlob(int code);
+
+#ifdef __WINDOWS__
+  Future<Nothing> urlFetchBlob(
+      const URI& uri,
+      const string& directory,
+      const URI& blobUri,
+      const http::Headers& authHeaders,
+      const Future<Nothing>& failure);
+
+  Future<Nothing> _urlFetchBlob(
+      const string& directory,
+      const URI& blobUri,
+      const http::Headers& authHeaders,
+      vector<string> urls,
+      const Future<int>& code);
+#endif
 
   // Returns a token-based authorization header. Basic authorization
   // header may be required to get a proper authorization token.
@@ -860,7 +888,17 @@ Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
         return _fetchBlob(uri, directory, blobUri, authHeaders);
       }
 
-      return __fetchBlob(code);
+      return __fetchBlob(code)
+#ifdef __WINDOWS__
+          .recover(defer(self(),
+                         &Self::urlFetchBlob,
+                         uri,
+                         directory,
+                         blobUri,
+                         authHeaders,
+                         lambda::_1))
+#endif
+          ;
     }));
 }
 
@@ -891,7 +929,17 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
           return download(blobUri, directory, authHeaders, stallTimeout)
             .then(defer(self(),
                         &Self::__fetchBlob,
-                        lambda::_1));
+                        lambda::_1))
+#ifdef __WINDOWS__
+            .recover(defer(self(),
+                           &Self::urlFetchBlob,
+                           uri,
+                           directory,
+                           blobUri,
+                           authHeaders,
+                           lambda::_1))
+#endif
+            ;
         }));
     }));
 }
@@ -907,6 +955,93 @@ Future<Nothing> DockerFetcherPluginProcess::__fetchBlob(int code)
       "Unexpected HTTP response '" + http::Status::string(code) + "' "
       "when trying to download the blob");
 }
+
+
+#ifdef __WINDOWS__
+Future<Nothing> DockerFetcherPluginProcess::urlFetchBlob(
+      const URI& uri,
+      const string& directory,
+      const URI& blobUri,
+      const http::Headers& authHeaders,
+      const Future<Nothing>& failure)
+{
+  Try<string> _manifest = os::read(path::join(directory, "manifest_v2s2"));
+  if (_manifest.isError()) {
+    VLOG(1) << "Scheme 2 manifest does not exist";
+    return failure;
+  }
+
+  Try<spec::v2_2::ImageManifest> manifest = spec::v2_2::parse(_manifest.get());
+  if (manifest.isError()) {
+    VLOG(1) << "Failed to parse the scheme 2 manifest: "
+            << manifest.error();
+    return failure;
+  }
+
+  const string& blobsum = uri.query(); // blobsum or digest of blob
+  vector<string> urls;
+  for (int i = 0; i < manifest->layers_size(); i++) {
+    if (blobsum == manifest->layers(i).digest()) {
+      for (int j = 0; j < manifest->layers(i).urls_size(); ++j) {
+        urls.emplace_back(manifest->layers(i).urls(j));
+      }
+      break;
+    }
+  }
+  if (urls.empty()) {
+    VLOG(1) << "No foreign url found from scheme 2 manifest";
+    return failure;
+  }
+
+  string url = urls.back();
+  urls.pop_back();
+  return download(blobUri, url, directory, authHeaders, stallTimeout)
+      .onAny(defer(self(),
+                   &Self::_urlFetchBlob,
+                   directory,
+                   blobUri,
+                   authHeaders,
+                   urls,
+                   lambda::_1))
+      .then(defer(self(), []() { return Nothing(); }));
+}
+
+
+Future<Nothing> DockerFetcherPluginProcess::_urlFetchBlob(
+      const string& directory,
+      const URI& blobUri,
+      const http::Headers& authHeaders,
+      vector<string> urls,
+      const Future<int>& code)
+{
+  if (code.isReady() && code.get() == http::Status::OK) {
+    return Nothing();
+  } else {
+    if (code.isFailed()) {
+      VLOG(1) << "Download failed" << code.failure()
+              << "' when trying to download the blob";
+    } else {
+      VLOG(1) << "Unexpected HTTP response '" << http::Status::string(code.get())
+              << "' when trying to download the blob";
+    }
+    if (!urls.empty()) {
+      string url = urls.back();
+      urls.pop_back();
+      return download(blobUri, url, directory, authHeaders, stallTimeout)
+          .onAny(defer(self(),
+                       &Self::_urlFetchBlob,
+                       directory,
+                       blobUri,
+                       authHeaders,
+                       urls,
+                       lambda::_1))
+          .then(defer(self(), []() { return Nothing(); }));
+    } else {
+      return Failure("Failed to fetch with foreign urls");
+    }
+  }
+}
+#endif
 
 
 Future<http::Headers> DockerFetcherPluginProcess::getAuthHeader(
