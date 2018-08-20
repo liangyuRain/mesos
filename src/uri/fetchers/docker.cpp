@@ -710,7 +710,7 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
   if (response.code != http::Status::OK) {
     return Failure(
         "Unexpected HTTP response '" + response.status + "' "
-        "when trying to get the scheme 1 manifest");
+        "when trying to get the schema 1 manifest");
   }
 
   CHECK_EQ(response.type, http::Response::BODY);
@@ -737,14 +737,14 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
           "application/json");
 
     if (!isV2Schema1) {
-      return Failure("Unsupported scheme 1 manifest MIME type: " +
+      return Failure("Unsupported schema 1 manifest MIME type: " +
           contentType.get());
     }
   }
 
   Try<spec::v2::ImageManifest> manifest = spec::v2::parse(response.body);
   if (manifest.isError()) {
-    return Failure("Failed to parse the scheme 1 image manifest: " +
+    return Failure("Failed to parse the schema 1 image manifest: " +
         manifest.error());
   }
 
@@ -753,7 +753,7 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
 
   if (write.isError()) {
     return Failure(
-        "Failed to write the scheme 1 image manifest to '" +
+        "Failed to write the schema 1 image manifest to '" +
         directory + "': " + write.error());
   }
 
@@ -771,7 +771,7 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
         const http::Response& response = f.get();
         if (response.code != http::Status::OK) {
           VLOG(1) << "Unexpected HTTP response '" << response.status
-                  << "' when trying to get the scheme 2 manifest";
+                  << "' when trying to get the schema 2 manifest";
           return Nothing();
         }
 
@@ -786,7 +786,7 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
                 "application/json");
 
           if (!isV2Schema2) {
-            VLOG(1) << "scheme 2 manifest fetch failed";
+            VLOG(1) << "schema 2 manifest fetch failed";
             return Nothing();
           }
         }
@@ -794,7 +794,7 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
         Try<spec::v2_2::ImageManifest> manifest =
             spec::v2_2::parse(response.body);
         if (manifest.isError()) {
-          VLOG(1) << "Failed to parse the scheme 2 manifest: "
+          VLOG(1) << "Failed to parse the schema 2 manifest: "
                   << manifest.error();
           return Nothing();
         }
@@ -804,7 +804,7 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
             directory, response.body, "manifest_v2s2");
 
         if (write.isError()) {
-          VLOG(1) << "Failed to write the scheme 2 image manifest '"
+          VLOG(1) << "Failed to write the schema 2 image manifest '"
                    << directory + "': " + write.error();
           return Nothing();
         }
