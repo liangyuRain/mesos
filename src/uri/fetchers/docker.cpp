@@ -90,10 +90,17 @@ static set<string> schemes()
 // command. The returned HTTP response will have the type 'BODY' (no
 // streaming).
 static Future<http::Response> curl(
-    const string& uri,
+    const string& _uri,
     const http::Headers& headers,
     const Option<Duration>& stallTimeout)
 {
+#ifdef __WINDOWS__
+  // Replace all '\' to '/'.
+  const string uri = strings::replace(_uri, "\\", "/");
+#else
+  const string& uri = _uri;
+#endif // __WINDOWS__
+
   vector<string> argv = {
     "curl",
     "-s",       // Don't show progress meter or error messages.
@@ -215,11 +222,22 @@ static Future<http::Response> curl(
 
 // TODO(jieyu): Add a comment here.
 static Future<int> download(
-    const string& uri,
-    const string& blobPath,
+    const string& _uri,
+    const string& _blobPath,
     const http::Headers& headers,
     const Option<Duration>& stallTimeout)
 {
+#ifdef __WINDOWS__
+  // Replace all '\' to '/'.
+  const string uri = strings::replace(_uri, "\\", "/");
+
+  // Replace any illegal ':' with '_'
+  const string blobPath = path::replaceColon(_blobPath);
+#else
+  const string& uri = _uri;
+  const string& blobPath = _blobPath;
+#endif // __WINDOWS__
+
   vector<string> argv = {
     "curl",
     "-s",                 // Don't show progress meter or error messages.
@@ -292,7 +310,11 @@ static Future<int> download(
             (output.isFailed() ? output.failure() : "discarded"));
       }
 
+#ifdef __WINDOWS__
+      vector<string> tokens = strings::tokenize(output.get(), "\r\n", 2);
+#else
       vector<string> tokens = strings::tokenize(output.get(), "\n", 2);
+#endif // __WINDOWS__
       if (tokens.empty()) {
         return Failure("Unexpected 'curl' output: " + output.get());
       }
@@ -328,6 +350,20 @@ static Future<int> download(
   return download(
       strings::trim(stringify(uri)), blobPath, headers, stallTimeout);
 }
+
+
+#ifdef __WINDOWS__
+static Future<int> download(
+    const URI& uri,
+    const string& url,
+    const string& directory,
+    const http::Headers& headers,
+    const Option<Duration>& stallTimeout)
+{
+  const string blobPath = path::join(directory, Path(uri.path()).basename());
+  return download(url, blobPath, headers, stallTimeout);
+}
+#endif
 
 
 // Returns the 'Basic' credential as a header for pulling an image
@@ -419,6 +455,20 @@ private:
       const http::Headers& authHeaders,
       const http::Response& response);
 
+  Future<Nothing> ___fetch(
+      const URI& uri,
+      const string& directory,
+      const http::Headers& authHeaders,
+      const spec::v2::ImageManifest& manifest);
+
+  Try<spec::v2::ImageManifest> saveV2S1Manifest(
+      const string& directory,
+      const http::Response& response);
+
+  Try<spec::v2_2::ImageManifest> saveV2S2Manifest(
+      const string& directory,
+      const http::Response& response);
+
   Future<Nothing> fetchBlob(
       const URI& uri,
       const string& directory,
@@ -430,7 +480,20 @@ private:
       const URI& blobUri,
       const http::Headers& basicAuthHeaders);
 
-  Future<Nothing> __fetchBlob(int code);
+#ifdef __WINDOWS__
+  Future<Nothing> urlFetchBlob(
+      const URI& uri,
+      const string& directory,
+      const URI& blobUri,
+      const http::Headers& authHeaders,
+      const Future<Nothing>& failure);
+
+  Future<Nothing> _urlFetchBlob(
+      const string& directory,
+      const URI& blobUri,
+      const http::Headers& authHeaders,
+      vector<string> urls);
+#endif
 
   // Returns a token-based authorization header. Basic authorization
   // header may be required to get a proper authorization token.
@@ -644,10 +707,95 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
     const http::Headers& authHeaders,
     const http::Response& response)
 {
+  Try<spec::v2::ImageManifest> manifest =
+      saveV2S1Manifest(directory, response);
+  if (manifest.isError()) {
+    return Failure(manifest.error());
+  }
+
+#ifdef __WINDOWS__
+  URI manifestUri = getManifestUri(uri);
+
+  // Fetching version 2 schema 2 manifest:
+  // https://docs.docker.com/registry/spec/manifest-v2-2/
+  //
+  // If fetch is failed, program continues without schema 2 manifest.
+  http::Headers s2ManifestHeaders = {
+    {"Accept", "application/vnd.docker.distribution.manifest.v2+json"}
+  };
+
+  return curl(manifestUri, s2ManifestHeaders + authHeaders, stallTimeout)
+      .onAny(defer(self(), [=](const Future<http::Response>& f)
+          -> Future<Nothing> {
+        if (!f.isReady()) return Nothing();
+
+        const http::Response& response = f.get();
+        Try<spec::v2_2::ImageManifest> manifest =
+            saveV2S2Manifest(directory, response);
+        if (manifest.isError()) {
+          LOG(WARNING) << "Failed to fetch schema 2 manifest: "
+                       << manifest.error();
+        }
+
+        return Nothing();
+      }))
+      .then(defer(self(),
+                  &Self::___fetch,
+                  uri,
+                  directory,
+                  authHeaders,
+                  manifest.get()));
+#else
+  return ___fetch(uri, directory, authHeaders, manifest.get());
+#endif
+}
+
+
+Future<Nothing> DockerFetcherPluginProcess::___fetch(
+    const URI& uri,
+    const string& directory,
+    const http::Headers& authHeaders,
+    const spec::v2::ImageManifest& manifest)
+{
+  // No need to proceed if we only want manifest.
+  if (uri.scheme() == "docker-manifest") {
+    return Nothing();
+  }
+
+  // Download all the filesystem layers.
+  vector<Future<Nothing>> futures;
+  for (int i = 0; i < manifest.fslayers_size(); i++) {
+    URI blob = uri::docker::blob(
+        uri.path(),                         // The 'repository'.
+        manifest.fslayers(i).blobsum(),    // The 'digest'.
+        uri.host(),                         // The 'registry'.
+        (uri.has_fragment()                 // The 'scheme'.
+          ? Option<string>(uri.fragment())
+          : None()),
+        (uri.has_port()                     // The 'port'.
+          ? Option<int>(uri.port())
+          : None()));
+
+    // Use the same 'authHeaders' as for the manifest to pull the blobs.
+    futures.push_back(fetchBlob(
+        blob,
+        directory,
+        authHeaders));
+  }
+
+  return collect(futures)
+    .then([]() -> Future<Nothing> { return Nothing(); });
+}
+
+
+Try<spec::v2::ImageManifest> DockerFetcherPluginProcess::saveV2S1Manifest(
+    const string& directory,
+    const http::Response& response)
+{
   if (response.code != http::Status::OK) {
-    return Failure(
+    return Error(
         "Unexpected HTTP response '" + response.status + "' "
-        "when trying to get the manifest");
+        "when trying to get the schema 1 manifest");
   }
 
   CHECK_EQ(response.type, http::Response::BODY);
@@ -674,54 +822,78 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
           "application/json");
 
     if (!isV2Schema1) {
-      return Failure("Unsupported manifest MIME type: " + contentType.get());
+      return Error(
+          "Unsupported schema 1 manifest MIME type: " +
+          contentType.get());
     }
   }
 
   Try<spec::v2::ImageManifest> manifest = spec::v2::parse(response.body);
   if (manifest.isError()) {
-    return Failure("Failed to parse the image manifest: " + manifest.error());
+    return Error(
+        "Failed to parse the schema 1 image manifest: " +
+        manifest.error());
   }
 
   // Save manifest to 'directory'.
   Try<Nothing> write = os::write(
-      path::join(directory, "manifest"),
-      response.body);
+      path::join(directory, "manifest"), response.body);
 
   if (write.isError()) {
-    return Failure(
-        "Failed to write the image manifest to "
-        "'" + directory + "': " + write.error());
+    return Error(
+        "Failed to write the schema 1 image manifest to '" +
+        directory + "': " + write.error());
   }
 
-  // No need to proceed if we only want manifest.
-  if (uri.scheme() == "docker-manifest") {
-    return Nothing();
+  return manifest;
+}
+
+
+Try<spec::v2_2::ImageManifest> DockerFetcherPluginProcess::saveV2S2Manifest(
+    const string& directory,
+    const http::Response& response)
+{
+  if (response.code != http::Status::OK) {
+    return Error(
+        "Unexpected HTTP response '" + response.status +
+        "' when trying to get the schema 2 manifest");
   }
 
-  // Download all the filesystem layers.
-  vector<Future<Nothing>> futures;
-  for (int i = 0; i < manifest->fslayers_size(); i++) {
-    URI blob = uri::docker::blob(
-        uri.path(),                         // The 'repository'.
-        manifest->fslayers(i).blobsum(),    // The 'digest'.
-        uri.host(),                         // The 'registry'.
-        (uri.has_fragment()                 // The 'scheme'.
-          ? Option<string>(uri.fragment())
-          : None()),
-        (uri.has_port()                     // The 'port'.
-          ? Option<int>(uri.port())
-          : None()));
+  Option<string> contentType = response.headers.get("Content-Type");
+  if (contentType.isSome()) {
+    bool isV2Schema2 =
+      strings::startsWith(
+          contentType.get(),
+          "application/vnd.docker.distribution.manifest.v2") ||
+      strings::startsWith(
+          contentType.get(),
+          "application/json");
 
-    // Use the same 'authHeaders' as for the manifest to pull the blobs.
-    futures.push_back(fetchBlob(
-        blob,
-        directory,
-        authHeaders));
+    if (!isV2Schema2) {
+      return Error(
+          "Unsupported schema 2 manifest MIME type: " +
+          contentType.get());
+    }
   }
 
-  return collect(futures)
-    .then([]() -> Future<Nothing> { return Nothing(); });
+  Try<spec::v2_2::ImageManifest> manifest = spec::v2_2::parse(response.body);
+  if (manifest.isError()) {
+    return Error(
+        "Failed to parse the schema 2 manifest: " +
+        manifest.error());
+  }
+
+  // Save manifest to 'directory'.
+  Try<Nothing> write = os::write(
+      path::join(directory, "manifest_v2s2"), response.body);
+
+  if (write.isError()) {
+    return Error(
+        "Failed to write the schema 2 image manifest to '" +
+        directory + "': " + write.error());
+  }
+
+  return manifest;
 }
 
 
@@ -742,7 +914,21 @@ Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
         return _fetchBlob(uri, directory, blobUri, authHeaders);
       }
 
-      return __fetchBlob(code);
+      if (code == http::Status::OK) {
+        return Nothing();
+      }
+
+      Future<Nothing> failure = Failure(
+          "Unexpected HTTP response '" + http::Status::string(code) + "' "
+          "when trying to download the blob");
+
+#ifdef __WINDOWS__
+      LOG(WARNING) << "Failed to fetch '" << blobUri
+                   << "' with schema 1 manifest: " << failure.failure();
+      return urlFetchBlob(uri, directory, blobUri, authHeaders, failure);
+#else
+      return failure;
+#endif
     }));
 }
 
@@ -771,24 +957,96 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
         .then(defer(self(), [=](
             const http::Headers& authHeaders) -> Future<Nothing> {
           return download(blobUri, directory, authHeaders, stallTimeout)
-            .then(defer(self(),
-                        &Self::__fetchBlob,
-                        lambda::_1));
+            .then(defer(self(), [=](int code) -> Future<Nothing> {
+              if (code == http::Status::OK) {
+                return Nothing();
+              }
+
+              Future<Nothing> failure = Failure(
+                  "Unexpected HTTP response '" + http::Status::string(code) +
+                  "' when trying to download blob '" + stringify(blobUri) +
+                  "' with schema 1 manifest");
+#ifdef __WINDOWS__
+              LOG(WARNING) << failure.failure();
+              return urlFetchBlob(
+                  uri, directory, blobUri, authHeaders, failure);
+#else
+              return failure;
+#endif
+            }));
         }));
     }));
 }
 
 
-Future<Nothing> DockerFetcherPluginProcess::__fetchBlob(int code)
+#ifdef __WINDOWS__
+Future<Nothing> DockerFetcherPluginProcess::urlFetchBlob(
+      const URI& uri,
+      const string& directory,
+      const URI& blobUri,
+      const http::Headers& authHeaders,
+      const Future<Nothing>& failure)
 {
-  if (code == http::Status::OK) {
-    return Nothing();
+  Try<string> _manifest = os::read(path::join(directory, "manifest_v2s2"));
+  if (_manifest.isError()) {
+    return Failure("Schema 2 manifest does not exist");
   }
 
-  return Failure(
-      "Unexpected HTTP response '" + http::Status::string(code) + "' "
-      "when trying to download the blob");
+  Try<spec::v2_2::ImageManifest> manifest = spec::v2_2::parse(_manifest.get());
+  if (manifest.isError()) {
+    return Failure(
+        "Failed to parse the schema 2 manifest: " +
+        manifest.error());
+  }
+
+  const string& blobsum = uri.query(); // blobsum or digest of blob
+  vector<string> urls;
+  for (int i = 0; i < manifest->layers_size(); i++) {
+    if (blobsum == manifest->layers(i).digest()) {
+      for (int j = 0; j < manifest->layers(i).urls_size(); ++j) {
+        urls.emplace_back(manifest->layers(i).urls(j));
+      }
+      break;
+    }
+  }
+
+  if (urls.empty()) {
+    return Failure("No foreign url found from schema 2 manifest");
+  }
+
+  return _urlFetchBlob(directory, blobUri, authHeaders, urls);
 }
+
+
+Future<Nothing> DockerFetcherPluginProcess::_urlFetchBlob(
+      const string& directory,
+      const URI& blobUri,
+      const http::Headers& authHeaders,
+      vector<string> urls)
+{
+  if (!urls.empty()) {
+    string url = urls.back();
+    urls.pop_back();
+    return download(blobUri, url, directory, authHeaders, stallTimeout)
+        .then(defer(self(), [=](int code) -> Future<Nothing> {
+          if (code == http::Status::OK) {
+            return Nothing();
+          }
+
+          LOG(WARNING) << "Unexpected HTTP response '"
+                       << http::Status::string(code)
+                       << "' when trying to download blob '"
+                       << stringify(blobUri)
+                       << "' from '" << url
+                       << "' in schema 2 manifest";
+
+          return _urlFetchBlob(directory, blobUri, authHeaders, urls);
+        }));
+  } else {
+    return Failure("Failed to fetch with foreign urls");
+  }
+}
+#endif
 
 
 Future<http::Headers> DockerFetcherPluginProcess::getAuthHeader(
