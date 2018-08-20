@@ -362,6 +362,24 @@ TEST(PathTest, FromURI)
 }
 
 
+#ifdef __WINDOWS__
+TEST(PathTest, ReplaceColon)
+{
+  EXPECT_EQ("C:\\abc_def", path::replaceColon("C:\\abc:def"));
+  EXPECT_EQ("C:\\abc__def", path::replaceColon("C:\\abc::def"));
+  EXPECT_EQ("C:\\_abc", path::replaceColon("C:\\:abc"));
+  EXPECT_EQ(".\\abc_def", path::replaceColon(".\\abc:def"));
+  EXPECT_EQ(".\\_abc", path::replaceColon(".\\:abc"));
+
+  EXPECT_EQ("C:\\abc.def", path::replaceColon("C:\\abc:def", '.'));
+  EXPECT_EQ("C:\\abc..def", path::replaceColon("C:\\abc::def", '.'));
+  EXPECT_EQ("C:\\.abc", path::replaceColon("C:\\:abc", '.'));
+  EXPECT_EQ(".\\abc.def", path::replaceColon(".\\abc:def", '.'));
+  EXPECT_EQ(".\\.abc", path::replaceColon(".\\:abc", '.'));
+}
+#endif
+
+
 class PathFileTest : public TemporaryDirectoryTest {};
 
 
