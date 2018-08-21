@@ -125,23 +125,20 @@ inline Try<Bytes> size(
     const std::wstring& path,
     const FollowSymlink follow = FollowSymlink::FOLLOW_SYMLINK)
 {
-  {
-    const std::wstring& path(::internal::windows::longpath(path));
-    const Try<SharedHandle> handle = (follow == FollowSymlink::FOLLOW_SYMLINK)
-      ? ::internal::windows::get_handle_follow(path)
-      : ::internal::windows::get_handle_no_follow(path);
-    if (handle.isError()) {
-      return Error("Error obtaining handle to file: " + handle.error());
-    }
-
-    LARGE_INTEGER file_size;
-
-    if (::GetFileSizeEx(handle->get_handle(), &file_size) == 0) {
-      return WindowsError();
-    }
-
-    return Bytes(file_size.QuadPart);
+  const Try<SharedHandle> handle = (follow == FollowSymlink::FOLLOW_SYMLINK)
+    ? ::internal::windows::get_handle_follow(path)
+    : ::internal::windows::get_handle_no_follow(path);
+  if (handle.isError()) {
+    return Error("Error obtaining handle to file: " + handle.error());
   }
+
+  LARGE_INTEGER file_size;
+
+  if (::GetFileSizeEx(handle->get_handle(), &file_size) == 0) {
+    return WindowsError();
+  }
+
+  return Bytes(file_size.QuadPart);
 }
 
 
@@ -149,7 +146,7 @@ inline Try<Bytes> size(
     const std::string& path,
     const FollowSymlink follow = FollowSymlink::FOLLOW_SYMLINK)
 {
-  return size(::internal::windows::longpath(path));
+  return os::stat::size(::internal::windows::longpath(path), follow);
 }
 
 
