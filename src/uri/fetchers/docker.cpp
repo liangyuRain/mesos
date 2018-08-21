@@ -1027,11 +1027,12 @@ Future<Nothing> DockerFetcherPluginProcess::_urlFetchBlob(
       const Future<int>& code)
 {
   // The fetch is successful as long as any one of the urls works.
-  if (code.isReady() && code.get() == http::Status::OK) {
-    return Nothing();
+  if ((code.isReady() && code.get() == http::Status::OK) ||
+      code.isDiscarded()) {
+    return Nothing()
   } else {
     if (code.isFailed()) {
-      VLOG(1) << "Download failed" << code.failure()
+      VLOG(1) << "Download failed '" << code.failure()
               << "' when trying to download the blob";
     } else {
       VLOG(1) << "Unexpected HTTP response '"
