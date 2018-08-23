@@ -725,11 +725,10 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
   };
 
   return curl(manifestUri, s2ManifestHeaders + authHeaders, stallTimeout)
-      .onAny(defer(self(), [=](const Future<http::Response>& f)
+      .then(defer(self(), [=](const Future<http::Response>& f)
           -> Future<Nothing> {
-        if (!f.isReady()) return Nothing();
-
         const http::Response& response = f.get();
+
         Try<spec::v2_2::ImageManifest> manifest =
             saveV2S2Manifest(directory, response);
         if (manifest.isError()) {
