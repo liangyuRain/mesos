@@ -455,16 +455,19 @@ private:
       const http::Headers& authHeaders,
       const http::Response& response);
 
-  Try<Nothing> saveManifest(
-      const string& directory,
-      const string& manifest,
-      const string& filename = "manifest");
-
-  Future<Nothing> fetchBlobs(
+  Future<Nothing> ___fetch(
       const URI& uri,
       const string& directory,
       const http::Headers& authHeaders,
-      const Try<spec::v2::ImageManifest>& manifest);
+      const spec::v2::ImageManifest& manifest);
+
+  Try<spec::v2::ImageManifest> saveV2S1Manifest(
+      const string& directory,
+      const http::Response& response);
+
+  Try<spec::v2_2::ImageManifest> saveV2S2Manifest(
+      const string& directory,
+      const http::Response& response);
 
   Future<Nothing> fetchBlob(
       const URI& uri,
@@ -707,8 +710,93 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
     const http::Headers& authHeaders,
     const http::Response& response)
 {
+  Try<spec::v2::ImageManifest> manifest =
+      saveV2S1Manifest(directory, response);
+  if (manifest.isError()) {
+    return Failure(manifest.error());
+  }
+
+#ifdef __WINDOWS__
+  URI manifestUri = getManifestUri(uri);
+
+  // Fetching version 2 schema 2 manifest:
+  // https://docs.docker.com/registry/spec/manifest-v2-2/
+  //
+  // If fetch is failed, program continues without schema 2 manifest.
+  http::Headers s2ManifestHeaders = {
+    {"Accept", "application/vnd.docker.distribution.manifest.v2+json"}
+  };
+
+  return curl(manifestUri, s2ManifestHeaders + authHeaders, stallTimeout)
+      .onAny(defer(self(), [=](const Future<http::Response>& f)
+          -> Future<Nothing> {
+        if (!f.isReady()) return Nothing();
+
+        const http::Response& response = f.get();
+        Try<spec::v2_2::ImageManifest> manifest =
+            saveV2S2Manifest(directory, response);
+        if (manifest.isError()) {
+          LOG(WARNING) << "Failed to fetch schema 2 manifest: "
+                       << manifest.error();
+        }
+
+        return Nothing();
+      }))
+      .then(defer(self(),
+                  &Self::___fetch,
+                  uri,
+                  directory,
+                  authHeaders,
+                  manifest.get()));
+#else
+  return ___fetch(uri, directory, authHeaders, manifest.get());
+#endif
+}
+
+
+Future<Nothing> DockerFetcherPluginProcess::___fetch(
+    const URI& uri,
+    const string& directory,
+    const http::Headers& authHeaders,
+    const spec::v2::ImageManifest& manifest)
+{
+  // No need to proceed if we only want manifest.
+  if (uri.scheme() == "docker-manifest") {
+    return Nothing();
+  }
+
+  // Download all the filesystem layers.
+  vector<Future<Nothing>> futures;
+  for (int i = 0; i < manifest.fslayers_size(); i++) {
+    URI blob = uri::docker::blob(
+        uri.path(),                         // The 'repository'.
+        manifest.fslayers(i).blobsum(),    // The 'digest'.
+        uri.host(),                         // The 'registry'.
+        (uri.has_fragment()                 // The 'scheme'.
+          ? Option<string>(uri.fragment())
+          : None()),
+        (uri.has_port()                     // The 'port'.
+          ? Option<int>(uri.port())
+          : None()));
+
+    // Use the same 'authHeaders' as for the manifest to pull the blobs.
+    futures.push_back(fetchBlob(
+        blob,
+        directory,
+        authHeaders));
+  }
+
+  return collect(futures)
+    .then([]() -> Future<Nothing> { return Nothing(); });
+}
+
+
+Try<spec::v2::ImageManifest> DockerFetcherPluginProcess::saveV2S1Manifest(
+    const string& directory,
+    const http::Response& response)
+{
   if (response.code != http::Status::OK) {
-    return Failure(
+    return Error(
         "Unexpected HTTP response '" + response.status + "' "
         "when trying to get the schema 1 manifest");
   }
@@ -737,144 +825,78 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
           "application/json");
 
     if (!isV2Schema1) {
-      return Failure("Unsupported schema 1 manifest MIME type: " +
+      return Error(
+          "Unsupported schema 1 manifest MIME type: " +
           contentType.get());
     }
   }
 
   Try<spec::v2::ImageManifest> manifest = spec::v2::parse(response.body);
   if (manifest.isError()) {
-    return Failure("Failed to parse the schema 1 image manifest: " +
+    return Error(
+        "Failed to parse the schema 1 image manifest: " +
         manifest.error());
   }
 
   // Save manifest to 'directory'.
-  Try<Nothing> write = saveManifest(directory, response.body);
+  Try<Nothing> write = os::write(
+      path::join(directory, "manifest"), response.body);
 
   if (write.isError()) {
-    return Failure(
+    return Error(
         "Failed to write the schema 1 image manifest to '" +
         directory + "': " + write.error());
   }
 
-#ifdef __WINDOWS__
-  URI manifestUri = getManifestUri(uri);
-
-  // Fetching version 2 schema 2 manifest:
-  // https://docs.docker.com/registry/spec/manifest-v2-2/
-  //
-  // If fetch is failed, program continues without schema 2 manifest.
-  http::Headers s2ManifestHeaders = {
-    {"Accept", "application/vnd.docker.distribution.manifest.v2+json"}
-  };
-
-  return curl(manifestUri, s2ManifestHeaders + authHeaders, stallTimeout)
-      .onAny(defer(self(), [=](const Future<http::Response>& f)
-          -> Future<Nothing> {
-        if (!f.isReady()) return Nothing();
-
-        const http::Response& response = f.get();
-        if (response.code != http::Status::OK) {
-          VLOG(1) << "Unexpected HTTP response '" << response.status
-                  << "' when trying to get the schema 2 manifest";
-          return Nothing();
-        }
-
-        Option<string> contentType = response.headers.get("Content-Type");
-        if (contentType.isSome()) {
-          bool isV2Schema2 =
-            strings::startsWith(
-                contentType.get(),
-                "application/vnd.docker.distribution.manifest.v2") ||
-            strings::startsWith(
-                contentType.get(),
-                "application/json");
-
-          if (!isV2Schema2) {
-            VLOG(1) << "schema 2 manifest fetch failed";
-            return Nothing();
-          }
-        }
-
-        Try<spec::v2_2::ImageManifest> manifest =
-            spec::v2_2::parse(response.body);
-        if (manifest.isError()) {
-          VLOG(1) << "Failed to parse the schema 2 manifest: "
-                  << manifest.error();
-          return Nothing();
-        }
-
-        // Save manifest to 'directory'.
-        Try<Nothing> write = saveManifest(
-            directory, response.body, "manifest_v2s2");
-
-        if (write.isError()) {
-          VLOG(1) << "Failed to write the schema 2 image manifest '"
-                   << directory + "': " + write.error();
-          return Nothing();
-        }
-        return Nothing();
-      }))
-      .then(defer(self(),
-                  &Self::fetchBlobs,
-                  uri,
-                  directory,
-                  authHeaders,
-                  manifest));
-#else
-  return fetchBlobs(uri, directory, authHeaders, manifest);
-#endif
+  return manifest;
 }
 
 
-Try<Nothing> DockerFetcherPluginProcess::saveManifest(
+Try<spec::v2_2::ImageManifest> DockerFetcherPluginProcess::saveV2S2Manifest(
     const string& directory,
-    const string& manifest,
-    const string& filename)
+    const http::Response& response)
 {
+  if (response.code != http::Status::OK) {
+    return Error(
+        "Unexpected HTTP response '" + response.status +
+        "' when trying to get the schema 2 manifest");
+  }
+
+  Option<string> contentType = response.headers.get("Content-Type");
+  if (contentType.isSome()) {
+    bool isV2Schema2 =
+      strings::startsWith(
+          contentType.get(),
+          "application/vnd.docker.distribution.manifest.v2") ||
+      strings::startsWith(
+          contentType.get(),
+          "application/json");
+
+    if (!isV2Schema2) {
+      return Error(
+          "Unsupported schema 2 manifest MIME type: " +
+          contentType.get());
+    }
+  }
+
+  Try<spec::v2_2::ImageManifest> manifest = spec::v2_2::parse(response.body);
+  if (manifest.isError()) {
+    return Error(
+        "Failed to parse the schema 2 manifest: " +
+        manifest.error());
+  }
+
   // Save manifest to 'directory'.
   Try<Nothing> write = os::write(
-      path::join(directory, filename),
-      manifest);
+      path::join(directory, "manifest_v2s2"), response.body);
 
-  return write;
-}
-
-
-Future<Nothing> DockerFetcherPluginProcess::fetchBlobs(
-    const URI& uri,
-    const string& directory,
-    const http::Headers& authHeaders,
-    const Try<spec::v2::ImageManifest>& manifest)
-{
-  // No need to proceed if we only want manifest.
-  if (uri.scheme() == "docker-manifest") {
-    return Nothing();
+  if (write.isError()) {
+    return Error(
+        "Failed to write the schema 2 image manifest to '" +
+        directory + "': " + write.error());
   }
 
-  // Download all the filesystem layers.
-  vector<Future<Nothing>> futures;
-  for (int i = 0; i < manifest->fslayers_size(); i++) {
-    URI blob = uri::docker::blob(
-        uri.path(),                         // The 'repository'.
-        manifest->fslayers(i).blobsum(),    // The 'digest'.
-        uri.host(),                         // The 'registry'.
-        (uri.has_fragment()                 // The 'scheme'.
-          ? Option<string>(uri.fragment())
-          : None()),
-        (uri.has_port()                     // The 'port'.
-          ? Option<int>(uri.port())
-          : None()));
-
-    // Use the same 'authHeaders' as for the manifest to pull the blobs.
-    futures.push_back(fetchBlob(
-        blob,
-        directory,
-        authHeaders));
-  }
-
-  return collect(futures)
-    .then([]() -> Future<Nothing> { return Nothing(); });
+  return manifest;
 }
 
 
@@ -897,7 +919,7 @@ Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
 
 #ifdef __WINDOWS__
       return __fetchBlob(code)
-          .recover(defer(self(),
+          .repair(defer(self(),
                          &Self::urlFetchBlob,
                          uri,
                          directory,
@@ -939,7 +961,7 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
             .then(defer(self(),
                         &Self::__fetchBlob,
                         lambda::_1))
-            .recover(defer(self(),
+            .repair(defer(self(),
                            &Self::urlFetchBlob,
                            uri,
                            directory,
