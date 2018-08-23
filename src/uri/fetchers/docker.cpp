@@ -480,8 +480,6 @@ private:
       const URI& blobUri,
       const http::Headers& basicAuthHeaders);
 
-  Future<Nothing> __fetchBlob(int code);
-
 #ifdef __WINDOWS__
   Future<Nothing> urlFetchBlob(
       const URI& uri,
@@ -917,17 +915,18 @@ Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
         return _fetchBlob(uri, directory, blobUri, authHeaders);
       }
 
+      if (code == http::Status::OK) {
+        return Nothing();
+      }
+
+      Future<Nothing> failure = Failure(
+          "Unexpected HTTP response '" + http::Status::string(code) + "' "
+          "when trying to download the blob");
+
 #ifdef __WINDOWS__
-      return __fetchBlob(code)
-          .repair(defer(self(),
-                         &Self::urlFetchBlob,
-                         uri,
-                         directory,
-                         blobUri,
-                         authHeaders,
-                         lambda::_1));
+      return urlFetchBlob(uri, directory, blobUri, authHeaders, failure);
 #else
-      return __fetchBlob(code);
+      return failure;
 #endif
     }));
 }
@@ -957,36 +956,23 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
         .then(defer(self(), [=](
             const http::Headers& authHeaders) -> Future<Nothing> {
           return download(blobUri, directory, authHeaders, stallTimeout)
+            .then(defer(self(), [=](int code) -> Future<Nothing> {
+              if (code == http::Status::OK) {
+                return Nothing();
+              }
+
+              Future<Nothing> failure = Failure(
+                  "Unexpected HTTP response '" + http::Status::string(code) +
+                  "' when trying to download the blob");
 #ifdef __WINDOWS__
-            .then(defer(self(),
-                        &Self::__fetchBlob,
-                        lambda::_1))
-            .repair(defer(self(),
-                           &Self::urlFetchBlob,
-                           uri,
-                           directory,
-                           blobUri,
-                           authHeaders,
-                           lambda::_1));
+              return urlFetchBlob(
+                  uri, directory, blobUri, authHeaders, failure);
 #else
-            .then(defer(self(),
-                        &Self::__fetchBlob,
-                        lambda::_1));
+              return failure;
 #endif
+            }));
         }));
     }));
-}
-
-
-Future<Nothing> DockerFetcherPluginProcess::__fetchBlob(int code)
-{
-  if (code == http::Status::OK) {
-    return Nothing();
-  }
-
-  return Failure(
-      "Unexpected HTTP response '" + http::Status::string(code) + "' "
-      "when trying to download the blob");
 }
 
 
