@@ -492,8 +492,7 @@ private:
       const string& directory,
       const URI& blobUri,
       const http::Headers& authHeaders,
-      vector<string> urls,
-      const Future<int>& code);
+      vector<string> urls);
 #endif
 
   // Returns a token-based authorization header. Basic authorization
@@ -924,6 +923,8 @@ Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
           "when trying to download the blob");
 
 #ifdef __WINDOWS__
+      LOG(WARNING) << "Failed to fetch '" << blobUri
+                   << "' with schema 1 manifest: " << failure.failure();
       return urlFetchBlob(uri, directory, blobUri, authHeaders, failure);
 #else
       return failure;
@@ -963,8 +964,10 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
 
               Future<Nothing> failure = Failure(
                   "Unexpected HTTP response '" + http::Status::string(code) +
-                  "' when trying to download the blob");
+                  "' when trying to download blob '" + stringify(blobUri) +
+                  "' with schema 1 manifest");
 #ifdef __WINDOWS__
+              LOG(WARNING) << failure.failure();
               return urlFetchBlob(
                   uri, directory, blobUri, authHeaders, failure);
 #else
@@ -986,15 +989,14 @@ Future<Nothing> DockerFetcherPluginProcess::urlFetchBlob(
 {
   Try<string> _manifest = os::read(path::join(directory, "manifest_v2s2"));
   if (_manifest.isError()) {
-    VLOG(1) << "Schema 2 manifest does not exist";
-    return failure;
+    return Failure("Schema 2 manifest does not exist");
   }
 
   Try<spec::v2_2::ImageManifest> manifest = spec::v2_2::parse(_manifest.get());
   if (manifest.isError()) {
-    VLOG(1) << "Failed to parse the schema 2 manifest: "
-            << manifest.error();
-    return failure;
+    return Failure(
+        "Failed to parse the schema 2 manifest: " +
+        manifest.error());
   }
 
   const string& blobsum = uri.query(); // blobsum or digest of blob
@@ -1007,23 +1009,12 @@ Future<Nothing> DockerFetcherPluginProcess::urlFetchBlob(
       break;
     }
   }
+
   if (urls.empty()) {
-    VLOG(1) << "No foreign url found from schema 2 manifest";
-    return failure;
+    return Failure("No foreign url found from schema 2 manifest");
   }
 
-  string url = urls.back();
-  urls.pop_back();
-  return download(blobUri, url, directory, authHeaders, stallTimeout)
-      .onAny(defer(self(),
-                   &Self::_urlFetchBlob,
-                   directory,
-                   blobUri,
-                   authHeaders,
-                   urls,
-                   lambda::_1))
-      // `then` is used to comply return type `Future<Nothing>`.
-      .then(defer(self(), []() { return Nothing(); }));
+  return _urlFetchBlob(directory, blobUri, authHeaders, urls);
 }
 
 
@@ -1031,38 +1022,28 @@ Future<Nothing> DockerFetcherPluginProcess::_urlFetchBlob(
       const string& directory,
       const URI& blobUri,
       const http::Headers& authHeaders,
-      vector<string> urls,
-      const Future<int>& code)
+      vector<string> urls)
 {
-  // The fetch is successful as long as any one of the urls works.
-  if ((code.isReady() && code.get() == http::Status::OK) ||
-      code.isDiscarded()) {
-    return Nothing();
+  if (!urls.empty()) {
+    string url = urls.back();
+    urls.pop_back();
+    return download(blobUri, url, directory, authHeaders, stallTimeout)
+        .then(defer(self(), [=](int code) -> Future<Nothing> {
+          if (code == http::Status::OK) {
+            return Nothing();
+          }
+
+          LOG(WARNING) << "Unexpected HTTP response '"
+                       << http::Status::string(code)
+                       << "' when trying to download blob '"
+                       << stringify(blobUri)
+                       << "' from '" << url
+                       << "' in schema 2 manifest";
+
+          return _urlFetchBlob(directory, blobUri, authHeaders, urls);
+        }));
   } else {
-    if (code.isFailed()) {
-      VLOG(1) << "Download failed '" << code.failure()
-              << "' when trying to download the blob";
-    } else {
-      VLOG(1) << "Unexpected HTTP response '"
-              << http::Status::string(code.get())
-              << "' when trying to download the blob";
-    }
-    if (!urls.empty()) {
-      string url = urls.back();
-      urls.pop_back();
-      return download(blobUri, url, directory, authHeaders, stallTimeout)
-          .onAny(defer(self(),
-                       &Self::_urlFetchBlob,
-                       directory,
-                       blobUri,
-                       authHeaders,
-                       urls,
-                       lambda::_1))
-          // `then` is used to comply return type `Future<Nothing>`.
-          .then(defer(self(), []() { return Nothing(); }));
-    } else {
-      return Failure("Failed to fetch with foreign urls");
-    }
+    return Failure("Failed to fetch with foreign urls");
   }
 }
 #endif
