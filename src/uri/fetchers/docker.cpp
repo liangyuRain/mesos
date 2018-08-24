@@ -95,6 +95,7 @@ static Future<http::Response> curl(
     const Option<Duration>& stallTimeout)
 {
 #ifdef __WINDOWS__
+  // TODO(andschwa): Reconcile with percent-encoding logic.
   // Replace all '\' to '/'.
   const string uri = strings::replace(_uri, "\\", "/");
 #else
@@ -228,6 +229,7 @@ static Future<int> download(
     const Option<Duration>& stallTimeout)
 {
 #ifdef __WINDOWS__
+  // TODO(andschwa): Reconcile with percent-encoding logic.
   // Replace all '\' to '/'.
   const string uri = strings::replace(_uri, "\\", "/");
 
@@ -708,6 +710,7 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
 {
   Try<spec::v2::ImageManifest> manifest =
       saveV2S1Manifest(directory, response);
+
   if (manifest.isError()) {
     return Failure(manifest.error());
   }
@@ -724,12 +727,11 @@ Future<Nothing> DockerFetcherPluginProcess::__fetch(
   };
 
   return curl(manifestUri, s2ManifestHeaders + authHeaders, stallTimeout)
-      .then(defer(self(), [=](const Future<http::Response>& f)
+      .then(defer(self(), [=](const http::Response& response)
           -> Future<Nothing> {
-        const http::Response& response = f.get();
-
         Try<spec::v2_2::ImageManifest> manifest =
             saveV2S2Manifest(directory, response);
+
         if (manifest.isError()) {
           LOG(WARNING) << "Failed to fetch schema 2 manifest: "
                        << manifest.error();
@@ -921,8 +923,6 @@ Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
           "when trying to download the blob");
 
 #ifdef __WINDOWS__
-      LOG(WARNING) << "Failed to fetch '" << blobUri
-                   << "' with schema 1 manifest: " << failure.failure();
       return urlFetchBlob(uri, directory, blobUri, authHeaders);
 #else
       return failure;
@@ -965,7 +965,6 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
                   "' when trying to download blob '" + stringify(blobUri) +
                   "' with schema 1 manifest");
 #ifdef __WINDOWS__
-              LOG(WARNING) << failure.failure();
               return urlFetchBlob(uri, directory, blobUri, authHeaders);
 #else
               return failure;
@@ -998,13 +997,14 @@ Future<Nothing> DockerFetcherPluginProcess::urlFetchBlob(
   const string& blobsum = uri.query(); // blobsum or digest of blob
   vector<string> urls;
   for (int i = 0; i < manifest->layers_size(); i++) {
-    if (blobsum == manifest->layers(i).digest()) {
-      for (int j = 0; j < manifest->layers(i).urls_size(); ++j) {
+    if (blobsum != manifest->layers(i).digest()) {
+      continue;
+    }
+    for (int j = 0; j < manifest->layers(i).urls_size(); j++) {
         urls.emplace_back(manifest->layers(i).urls(j));
       }
       break;
     }
-  }
 
   if (urls.empty()) {
     return Failure("No foreign url found from schema 2 manifest");
@@ -1020,7 +1020,9 @@ Future<Nothing> DockerFetcherPluginProcess::_urlFetchBlob(
       const http::Headers& authHeaders,
       vector<string> urls)
 {
-  if (!urls.empty()) {
+  if (urls.empty()) {
+    return Failure("Failed to fetch with foreign urls");
+  }
     string url = urls.back();
     urls.pop_back();
     return download(blobUri, url, directory, authHeaders, stallTimeout)
@@ -1038,9 +1040,6 @@ Future<Nothing> DockerFetcherPluginProcess::_urlFetchBlob(
 
           return _urlFetchBlob(directory, blobUri, authHeaders, urls);
         }));
-  } else {
-    return Failure("Failed to fetch with foreign urls");
-  }
 }
 #endif
 
