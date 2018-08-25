@@ -49,6 +49,8 @@ namespace http = process::http;
 using std::list;
 using std::string;
 
+using mesos::uri::DockerFetcherPlugin;
+
 using process::Future;
 using process::Owned;
 using process::Process;
@@ -337,11 +339,7 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchBlob)
 
   AWAIT_READY_FOR(fetcher.get()->fetch(uri, dir), Seconds(60));
 
-#ifdef __WINDOWS__
-  EXPECT_TRUE(os::exists(path::replaceColon(path::join(dir, digest))));
-#else
-  EXPECT_TRUE(os::exists(path::join(dir, digest)));
-#endif // __WINDOWS__
+  EXPECT_TRUE(os::exists(DockerFetcherPlugin::getTarPath(dir, digest)));
 }
 
 
@@ -369,13 +367,8 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchImage)
     EXPECT_EQ(2u, manifest->schemaversion());
 
     for (int i = 0; i < manifest->layers_size(); i++) {
-#ifdef __WINDOWS__
-      EXPECT_TRUE(os::exists(path::replaceColon(path::join(
-          dir, manifest->layers(i).digest()))));
-#else
-      EXPECT_TRUE(os::exists(path::join(
+      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getTarPath(
           dir, manifest->layers(i).digest())));
-#endif // __WINDOWS__
     }
   } else {
     Try<docker::spec::v2::ImageManifest> manifest =
@@ -386,13 +379,8 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchImage)
     EXPECT_EQ("latest", manifest->tag());
 
     for (int i = 0; i < manifest->fslayers_size(); i++) {
-#ifdef __WINDOWS__
-      EXPECT_TRUE(os::exists(path::replaceColon(path::join(
-          dir, manifest->fslayers(i).blobsum()))));
-#else
-      EXPECT_TRUE(os::exists(path::join(
+      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getTarPath(
           dir, manifest->fslayers(i).blobsum())));
-#endif // __WINDOWS__
     }
   }
 }
@@ -423,12 +411,8 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_InvokeFetchByName)
     EXPECT_EQ(2u, manifest->schemaversion());
 
     for (int i = 0; i < manifest->layers_size(); i++) {
-#ifdef __WINDOWS__
-      EXPECT_TRUE(os::exists(path::replaceColon(path::join(
-          dir, manifest->layers(i).digest()))));
-#else
-      EXPECT_TRUE(os::exists(path::join(dir, manifest->layers(i).digest())));
-#endif // __WINDOWS__
+      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getTarPath(
+          dir, manifest->layers(i).digest())));
     }
   } else {
     Try<docker::spec::v2::ImageManifest> manifest =
@@ -439,13 +423,8 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_InvokeFetchByName)
     EXPECT_EQ("latest", manifest->tag());
 
     for (int i = 0; i < manifest->fslayers_size(); i++) {
-#ifdef __WINDOWS__
-      EXPECT_TRUE(os::exists(path::replaceColon(path::join(
-          dir, manifest->fslayers(i).blobsum()))));
-#else
-      EXPECT_TRUE(os::exists(path::join(
+      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getTarPath(
           dir, manifest->fslayers(i).blobsum())));
-#endif // __WINDOWS__
     }
   }
 }
