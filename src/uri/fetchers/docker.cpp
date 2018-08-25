@@ -1043,23 +1043,24 @@ Future<Nothing> DockerFetcherPluginProcess::_urlFetchBlob(
   if (urls.empty()) {
     return Failure("Failed to fetch with foreign urls");
   }
-    string url = urls.back();
-    urls.pop_back();
-    return download(blobUri, url, directory, authHeaders, stallTimeout)
-        .then(defer(self(), [=](int code) -> Future<Nothing> {
-          if (code == http::Status::OK) {
-            return Nothing();
-          }
 
-          LOG(WARNING) << "Unexpected HTTP response '"
-                       << http::Status::string(code)
-                       << "' when trying to download blob '"
-                       << strings::trim(stringify(blobUri))
-                       << "' from '" << url
-                       << "' in schema 2 manifest";
+  string url = urls.back();
+  urls.pop_back();
+  return download(blobUri, url, directory, authHeaders, stallTimeout)
+      .then(defer(self(), [=](int code) -> Future<Nothing> {
+        if (code == http::Status::OK) {
+          return Nothing();
+        }
 
-          return _urlFetchBlob(directory, blobUri, authHeaders, urls);
-        }));
+        LOG(WARNING) << "Unexpected HTTP response '"
+                      << http::Status::string(code)
+                      << "' when trying to download blob '"
+                      << strings::trim(stringify(blobUri))
+                      << "' from '" << url
+                      << "' in schema 2 manifest";
+
+        return _urlFetchBlob(directory, blobUri, authHeaders, urls);
+      }));
 }
 #endif
 
