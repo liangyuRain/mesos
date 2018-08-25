@@ -32,6 +32,7 @@
 
 #include "common/command_utils.hpp"
 
+#include "uri/fetchers/docker.hpp"
 #include "uri/schemes/docker.hpp"
 
 #include "slave/containerizer/mesos/provisioner/docker/paths.hpp"
@@ -43,6 +44,8 @@ namespace spec = docker::spec;
 using std::shared_ptr;
 using std::string;
 using std::vector;
+
+using mesos::uri::DockerFetcherPlugin;
 
 using process::Failure;
 using process::Future;
@@ -394,7 +397,7 @@ Future<vector<string>> RegistryPullerProcess::___pull(
     }
 
     const string layerPath = path::join(directory, v1.id());
-    const string tar = path::join(directory, blobSum);
+    const string tar = DockerFetcherPlugin::getTarPath(directory, blobSum);
     const string rootfs = paths::getImageLayerRootfsPath(layerPath, backend);
     const string json = paths::getImageLayerManifestPath(layerPath);
 
@@ -435,15 +438,14 @@ Future<vector<string>> RegistryPullerProcess::___pull(
   if (!tarPaths.empty()) {
     auto tar = tarPaths.crbegin();
     auto rootfs = layerPaths->cend() - 1;
-    future = command::wclayer_import(
-        Path(path::replaceColon(*tar)), vector<Path>(), *rootfs);
+    future = command::wclayer_import(Path(*tar), vector<Path>(), *rootfs);
     ++tar;
     for (; tar < tarPaths.crend(); ++tar) {
       Path tarPath = *tar;
       --rootfs;
       future = future.then([=]() {
         return command::wclayer_import(
-            Path(path::replaceColon(tarPath)),
+            Path(tarPath),
             vector<Path>(rootfs + 1, layerPaths->cend()),
             *rootfs);
       });
@@ -458,12 +460,7 @@ Future<vector<string>> RegistryPullerProcess::___pull(
     .then([=]() -> Future<vector<string>> {
       // Remove the tarballs after the extraction.
       foreach (const string& blobSum, blobSums) {
-#ifdef __WINDOWS__
-        const string tar = path::replaceColon(path::join(directory, blobSum));
-#else
-        const string tar = path::join(directory, blobSum);
-#endif
-
+        const string tar = DockerFetcherPlugin::getTarPath(directory, blobSum);
         Try<Nothing> rm = os::rm(tar);
         if (rm.isError()) {
           return Failure(
