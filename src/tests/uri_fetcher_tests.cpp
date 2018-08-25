@@ -278,8 +278,12 @@ static constexpr char DOCKER_REGISTRY_HOST[] = "registry-1.docker.io";
 
 #ifdef __WINDOWS__
 static constexpr char TEST_REPOSITORY[] = "microsoft/nanoserver";
+static constexpr char TEST_DIGEST[] = "sha256:54389c2d19b423943102864aaf3fc"
+                                      "1296e5dd140a074b5bd6700de858a8e5479";
 #else
 static constexpr char TEST_REPOSITORY[] = "library/busybox";
+static constexpr char TEST_DIGEST[] = "sha256:a3ed95caeb02ffe68cdd9fd844066"
+                                      "80ae93d633cb16422d00e8a7c22955b46d4";
 #endif // __WINDOWS__
 
 
@@ -298,39 +302,35 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchManifest)
 
   AWAIT_READY_FOR(fetcher.get()->fetch(uri, dir), Seconds(60));
 
-  Try<string> _manifest = os::read(path::join(dir, "manifest"));
-  ASSERT_SOME(_manifest);
+  // Version 2 schema 1 image manifest test
+  Try<string> _s1Manifest = os::read(path::join(dir, "manifest"));
+  ASSERT_SOME(_s1Manifest);
 
-  Try<docker::spec::v2_2::ImageManifest> manifest =
-    docker::spec::v2_2::parse(_manifest.get());
+  Try<docker::spec::v2::ImageManifest> s1Manifest =
+      docker::spec::v2::parse(_s1Manifest.get());
 
-  if (!manifest.isError()) {
-    ASSERT_SOME(manifest);
-    EXPECT_EQ(2u, manifest->schemaversion());
-  } else {
-    Try<docker::spec::v2::ImageManifest> manifest =
-      docker::spec::v2::parse(_manifest.get());
-    ASSERT_SOME(manifest);
-    EXPECT_EQ(TEST_REPOSITORY, manifest->name());
-    EXPECT_EQ("latest", manifest->tag());
-  }
+  ASSERT_SOME(s1Manifest);
+  EXPECT_EQ(1u, s1Manifest->schemaversion());
+  EXPECT_EQ(TEST_REPOSITORY, s1Manifest->name());
+  EXPECT_EQ("latest", s1Manifest->tag());
+
+#ifdef __WINDOWS__
+  // Version 2 schema 2 image manifest test
+  Try<string> _s2Manifest = os::read(path::join(dir, "manifest_v2s2"));
+  ASSERT_SOME(_s2Manifest);
+
+  Try<docker::spec::v2_2::ImageManifest> s2Manifest =
+      docker::spec::v2_2::parse(_s2Manifest.get());
+
+  ASSERT_SOME(s2Manifest);
+  EXPECT_EQ(2u, s2Manifest->schemaversion());
+#endif // __WINDOWS__
 }
 
 
 TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchBlob)
 {
-  string digest;
-  if (string(TEST_REPOSITORY) == "microsoft/nanoserver") {
-    digest =
-      "sha256:54389c2d19b423943102864aaf3fc"
-      "1296e5dd140a074b5bd6700de858a8e5479";
-  } else if (string(TEST_REPOSITORY) == "library/busybox") {
-    digest =
-      "sha256:a3ed95caeb02ffe68cdd9fd844066"
-      "80ae93d633cb16422d00e8a7c22955b46d4";
-  }
-
-  URI uri = uri::docker::blob(TEST_REPOSITORY, digest, DOCKER_REGISTRY_HOST);
+  URI uri = uri::docker::blob(TEST_REPOSITORY, TEST_DIGEST, DOCKER_REGISTRY_HOST);
 
   Try<Owned<uri::Fetcher>> fetcher = uri::fetcher::create();
   ASSERT_SOME(fetcher);
@@ -339,7 +339,7 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchBlob)
 
   AWAIT_READY_FOR(fetcher.get()->fetch(uri, dir), Seconds(60));
 
-  EXPECT_TRUE(os::exists(DockerFetcherPlugin::getBlobPath(dir, digest)));
+  EXPECT_TRUE(os::exists(DockerFetcherPlugin::getBlobPath(dir, TEST_DIGEST)));
 }
 
 
