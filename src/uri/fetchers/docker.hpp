@@ -47,7 +47,7 @@ public:
 
   static Try<process::Owned<Fetcher::Plugin>> create(const Flags& flags);
 
-  static std::string getTarPath(
+  static std::string getBlobPath(
       const std::string& directory,
       const std::string& blobSum);
 

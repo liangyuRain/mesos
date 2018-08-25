@@ -346,7 +346,7 @@ static Future<int> download(
     const Option<Duration>& stallTimeout)
 {
   const string blobPath =
-      DockerFetcherPlugin::getTarPath(directory, Path(uri.path()).basename());
+      DockerFetcherPlugin::getBlobPath(directory, Path(uri.path()).basename());
   return download(url, blobPath, headers, stallTimeout);
 }
 
@@ -540,7 +540,7 @@ Try<Owned<Fetcher::Plugin>> DockerFetcherPlugin::create(const Flags& flags)
 }
 
 
-string DockerFetcherPlugin::getTarPath(
+string DockerFetcherPlugin::getBlobPath(
     const string& directory,
     const string& blobSum)
 {
