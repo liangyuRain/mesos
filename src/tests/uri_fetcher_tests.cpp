@@ -292,8 +292,8 @@ class DockerFetcherPluginTest : public TemporaryDirectoryTest {};
 
 TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchManifest)
 {
-  URI uri =
-    uri::docker::manifest(TEST_REPOSITORY, "latest", DOCKER_REGISTRY_HOST);
+  URI uri = uri::docker::manifest(
+      TEST_REPOSITORY, "latest", DOCKER_REGISTRY_HOST);
 
   Try<Owned<uri::Fetcher>> fetcher = uri::fetcher::create();
   ASSERT_SOME(fetcher);
@@ -330,7 +330,8 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchManifest)
 
 TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchBlob)
 {
-  URI uri = uri::docker::blob(TEST_REPOSITORY, TEST_DIGEST, DOCKER_REGISTRY_HOST);
+  URI uri = uri::docker::blob(
+      TEST_REPOSITORY, TEST_DIGEST, DOCKER_REGISTRY_HOST);
 
   Try<Owned<uri::Fetcher>> fetcher = uri::fetcher::create();
   ASSERT_SOME(fetcher);
@@ -346,8 +347,8 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchBlob)
 // Fetches the image manifest and all blobs in that image.
 TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchImage)
 {
-  URI uri =
-      uri::docker::image(TEST_REPOSITORY, "latest", DOCKER_REGISTRY_HOST);
+  URI uri = uri::docker::image(
+      TEST_REPOSITORY, "latest", DOCKER_REGISTRY_HOST);
 
   Try<Owned<uri::Fetcher>> fetcher = uri::fetcher::create();
   ASSERT_SOME(fetcher);
@@ -359,29 +360,17 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchImage)
   Try<string> _manifest = os::read(path::join(dir, "manifest"));
   ASSERT_SOME(_manifest);
 
-  Try<docker::spec::v2_2::ImageManifest> manifest =
-    docker::spec::v2_2::parse(_manifest.get());
-
-  if (!manifest.isError()) {
-    ASSERT_SOME(manifest);
-    EXPECT_EQ(2u, manifest->schemaversion());
-
-    for (int i = 0; i < manifest->layers_size(); i++) {
-      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getBlobPath(
-          dir, manifest->layers(i).digest())));
-    }
-  } else {
-    Try<docker::spec::v2::ImageManifest> manifest =
+  Try<docker::spec::v2::ImageManifest> manifest =
       docker::spec::v2::parse(_manifest.get());
 
-    ASSERT_SOME(manifest);
-    EXPECT_EQ(TEST_REPOSITORY, manifest->name());
-    EXPECT_EQ("latest", manifest->tag());
+  ASSERT_SOME(manifest);
+  EXPECT_EQ(1u, manifest->schemaversion());
+  EXPECT_EQ(TEST_REPOSITORY, manifest->name());
+  EXPECT_EQ("latest", manifest->tag());
 
-    for (int i = 0; i < manifest->fslayers_size(); i++) {
-      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getBlobPath(
-          dir, manifest->fslayers(i).blobsum())));
-    }
+  for (int i = 0; i < manifest->fslayers_size(); i++) {
+    EXPECT_TRUE(os::exists(DockerFetcherPlugin::getBlobPath(
+        dir, manifest->fslayers(i).blobsum())));
   }
 }
 
@@ -389,7 +378,8 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchImage)
 // This test verifies invoking 'fetch' by plugin name.
 TEST_F(DockerFetcherPluginTest, INTERNET_CURL_InvokeFetchByName)
 {
-  URI uri = uri::docker::image(TEST_REPOSITORY, "latest", DOCKER_REGISTRY_HOST);
+  URI uri = uri::docker::image(
+      TEST_REPOSITORY, "latest", DOCKER_REGISTRY_HOST);
 
   Try<Owned<uri::Fetcher>> fetcher = uri::fetcher::create();
   ASSERT_SOME(fetcher);
@@ -403,29 +393,17 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_InvokeFetchByName)
   Try<string> _manifest = os::read(path::join(dir, "manifest"));
   ASSERT_SOME(_manifest);
 
-  Try<docker::spec::v2_2::ImageManifest> manifest =
-    docker::spec::v2_2::parse(_manifest.get());
-
-  if (!manifest.isError()) {
-    ASSERT_SOME(manifest);
-    EXPECT_EQ(2u, manifest->schemaversion());
-
-    for (int i = 0; i < manifest->layers_size(); i++) {
-      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getBlobPath(
-          dir, manifest->layers(i).digest())));
-    }
-  } else {
-    Try<docker::spec::v2::ImageManifest> manifest =
+  Try<docker::spec::v2::ImageManifest> manifest =
       docker::spec::v2::parse(_manifest.get());
 
-    ASSERT_SOME(manifest);
-    EXPECT_EQ(TEST_REPOSITORY, manifest->name());
-    EXPECT_EQ("latest", manifest->tag());
+  ASSERT_SOME(manifest);
+  EXPECT_EQ(1u, manifest->schemaversion());
+  EXPECT_EQ(TEST_REPOSITORY, manifest->name());
+  EXPECT_EQ("latest", manifest->tag());
 
-    for (int i = 0; i < manifest->fslayers_size(); i++) {
-      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getBlobPath(
-          dir, manifest->fslayers(i).blobsum())));
-    }
+  for (int i = 0; i < manifest->fslayers_size(); i++) {
+    EXPECT_TRUE(os::exists(DockerFetcherPlugin::getBlobPath(
+        dir, manifest->fslayers(i).blobsum())));
   }
 }
 
