@@ -339,7 +339,7 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchBlob)
 
   AWAIT_READY_FOR(fetcher.get()->fetch(uri, dir), Seconds(60));
 
-  EXPECT_TRUE(os::exists(DockerFetcherPlugin::getTarPath(dir, digest)));
+  EXPECT_TRUE(os::exists(DockerFetcherPlugin::getBlobPath(dir, digest)));
 }
 
 
@@ -367,7 +367,7 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchImage)
     EXPECT_EQ(2u, manifest->schemaversion());
 
     for (int i = 0; i < manifest->layers_size(); i++) {
-      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getTarPath(
+      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getBlobPath(
           dir, manifest->layers(i).digest())));
     }
   } else {
@@ -379,7 +379,7 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_FetchImage)
     EXPECT_EQ("latest", manifest->tag());
 
     for (int i = 0; i < manifest->fslayers_size(); i++) {
-      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getTarPath(
+      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getBlobPath(
           dir, manifest->fslayers(i).blobsum())));
     }
   }
@@ -411,7 +411,7 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_InvokeFetchByName)
     EXPECT_EQ(2u, manifest->schemaversion());
 
     for (int i = 0; i < manifest->layers_size(); i++) {
-      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getTarPath(
+      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getBlobPath(
           dir, manifest->layers(i).digest())));
     }
   } else {
@@ -423,7 +423,7 @@ TEST_F(DockerFetcherPluginTest, INTERNET_CURL_InvokeFetchByName)
     EXPECT_EQ("latest", manifest->tag());
 
     for (int i = 0; i < manifest->fslayers_size(); i++) {
-      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getTarPath(
+      EXPECT_TRUE(os::exists(DockerFetcherPlugin::getBlobPath(
           dir, manifest->fslayers(i).blobsum())));
     }
   }
