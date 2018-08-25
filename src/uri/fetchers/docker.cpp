@@ -1021,10 +1021,10 @@ Future<Nothing> DockerFetcherPluginProcess::urlFetchBlob(
       continue;
     }
     for (int j = 0; j < manifest->layers(i).urls_size(); j++) {
-        urls.emplace_back(manifest->layers(i).urls(j));
-      }
-      break;
+      urls.emplace_back(manifest->layers(i).urls(j));
     }
+    break;
+  }
 
   if (urls.empty()) {
     return Failure("No foreign url found from schema 2 manifest");
