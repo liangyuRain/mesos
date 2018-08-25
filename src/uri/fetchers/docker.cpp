@@ -224,7 +224,7 @@ static Future<http::Response> curl(
 // TODO(jieyu): Add a comment here.
 static Future<int> download(
     const string& _uri,
-    const string& _blobPath,
+    const string& blobPath,
     const http::Headers& headers,
     const Option<Duration>& stallTimeout)
 {
@@ -232,12 +232,8 @@ static Future<int> download(
   // TODO(andschwa): Reconcile with percent-encoding logic.
   // Replace all '\' to '/'.
   const string uri = strings::replace(_uri, "\\", "/");
-
-  // Replace any illegal ':' with '_'
-  const string blobPath = path::replaceColon(_blobPath);
 #else
   const string& uri = _uri;
-  const string& blobPath = _blobPath;
 #endif // __WINDOWS__
 
   vector<string> argv = {
@@ -348,7 +344,8 @@ static Future<int> download(
     const http::Headers& headers,
     const Option<Duration>& stallTimeout)
 {
-  const string blobPath = path::join(directory, Path(uri.path()).basename());
+  const string blobPath =
+      DockerFetcherPlugin::getTarPath(directory, Path(uri.path()).basename());
   return download(
       strings::trim(stringify(uri)), blobPath, headers, stallTimeout);
 }
@@ -362,7 +359,8 @@ static Future<int> download(
     const http::Headers& headers,
     const Option<Duration>& stallTimeout)
 {
-  const string blobPath = path::join(directory, Path(uri.path()).basename());
+  const string blobPath =
+      DockerFetcherPlugin::getTarPath(directory, Path(uri.path()).basename());
   return download(url, blobPath, headers, stallTimeout);
 }
 #endif
@@ -554,6 +552,32 @@ Try<Owned<Fetcher::Plugin>> DockerFetcherPlugin::create(const Flags& flags)
       flags.docker_stall_timeout));
 
   return Owned<Fetcher::Plugin>(new DockerFetcherPlugin(process));
+}
+
+
+string DockerFetcherPlugin::getTarPath(
+    const string& directory,
+    const string& blobSum)
+{
+#ifdef __WINDOWS__
+  std::string path = path::join(directory, blobSum);
+
+  // The colon in disk designator is preserved.
+  int i = 0;
+  if (path::absolute(path)) {
+    i = path.find_first_of(':') + 1;
+  }
+
+  for (; i < path.size(); ++i) {
+    if (path[i] == ':') {
+      path[i] = '_';
+    }
+  }
+
+  return path;
+#else
+  return path::join(directory, blobSum);
+#endif
 }
 
 
