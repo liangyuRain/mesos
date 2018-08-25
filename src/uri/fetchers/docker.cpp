@@ -340,20 +340,6 @@ static Future<int> download(
 
 static Future<int> download(
     const URI& uri,
-    const string& directory,
-    const http::Headers& headers,
-    const Option<Duration>& stallTimeout)
-{
-  const string blobPath =
-      DockerFetcherPlugin::getTarPath(directory, Path(uri.path()).basename());
-  return download(
-      strings::trim(stringify(uri)), blobPath, headers, stallTimeout);
-}
-
-
-#ifdef __WINDOWS__
-static Future<int> download(
-    const URI& uri,
     const string& url,
     const string& directory,
     const http::Headers& headers,
@@ -363,7 +349,6 @@ static Future<int> download(
       DockerFetcherPlugin::getTarPath(directory, Path(uri.path()).basename());
   return download(url, blobPath, headers, stallTimeout);
 }
-#endif
 
 
 // Returns the 'Basic' credential as a header for pulling an image
@@ -928,7 +913,12 @@ Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
 {
   URI blobUri = getBlobUri(uri);
 
-  return download(blobUri, directory, authHeaders, stallTimeout)
+  return download(
+      blobUri,
+      strings::trim(stringify(blobUri)),
+      directory,
+      authHeaders,
+      stallTimeout)
     .then(defer(self(), [=](int code) -> Future<Nothing> {
       if (code == http::Status::UNAUTHORIZED) {
         // If we get a '401 Unauthorized', we assume that 'authHeaders'
@@ -978,7 +968,12 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
       return getAuthHeader(blobUri, basicAuthHeaders, response)
         .then(defer(self(), [=](
             const http::Headers& authHeaders) -> Future<Nothing> {
-          return download(blobUri, directory, authHeaders, stallTimeout)
+          return download(
+              blobUri,
+              strings::trim(stringify(blobUri)),
+              directory,
+              authHeaders,
+              stallTimeout)
             .then(defer(self(), [=](int code) -> Future<Nothing> {
               if (code == http::Status::OK) {
                 return Nothing();
