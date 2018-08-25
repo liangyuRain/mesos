@@ -397,7 +397,7 @@ Future<vector<string>> RegistryPullerProcess::___pull(
     }
 
     const string layerPath = path::join(directory, v1.id());
-    const string tar = DockerFetcherPlugin::getTarPath(directory, blobSum);
+    const string tar = DockerFetcherPlugin::getBlobPath(directory, blobSum);
     const string rootfs = paths::getImageLayerRootfsPath(layerPath, backend);
     const string json = paths::getImageLayerManifestPath(layerPath);
 
@@ -460,7 +460,7 @@ Future<vector<string>> RegistryPullerProcess::___pull(
     .then([=]() -> Future<vector<string>> {
       // Remove the tarballs after the extraction.
       foreach (const string& blobSum, blobSums) {
-        const string tar = DockerFetcherPlugin::getTarPath(directory, blobSum);
+        const string tar = DockerFetcherPlugin::getBlobPath(directory, blobSum);
         Try<Nothing> rm = os::rm(tar);
         if (rm.isError()) {
           return Failure(
