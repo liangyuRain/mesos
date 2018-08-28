@@ -90,18 +90,10 @@ static set<string> schemes()
 // command. The returned HTTP response will have the type 'BODY' (no
 // streaming).
 static Future<http::Response> curl(
-    const string& _uri,
+    const string& uri,
     const http::Headers& headers,
     const Option<Duration>& stallTimeout)
 {
-#ifdef __WINDOWS__
-  // TODO(andschwa): Reconcile with percent-encoding logic.
-  // Replace all '\' to '/'.
-  const string uri = strings::replace(_uri, "\\", "/");
-#else
-  const string& uri = _uri;
-#endif // __WINDOWS__
-
   vector<string> argv = {
     "curl",
     "-s",       // Don't show progress meter or error messages.
@@ -223,19 +215,11 @@ static Future<http::Response> curl(
 
 // TODO(jieyu): Add a comment here.
 static Future<int> download(
-    const string& _uri,
+    const string& uri,
     const string& blobPath,
     const http::Headers& headers,
     const Option<Duration>& stallTimeout)
 {
-#ifdef __WINDOWS__
-  // TODO(andschwa): Reconcile with percent-encoding logic.
-  // Replace all '\' to '/'.
-  const string uri = strings::replace(_uri, "\\", "/");
-#else
-  const string& uri = _uri;
-#endif // __WINDOWS__
-
   vector<string> argv = {
     "curl",
     "-s",                 // Don't show progress meter or error messages.
@@ -345,8 +329,15 @@ static Future<int> download(
     const http::Headers& headers,
     const Option<Duration>& stallTimeout)
 {
-  const string blobPath =
-      DockerFetcherPlugin::getBlobPath(directory, Path(uri.path()).basename());
+#ifdef __WINDOWS__
+  const string blobPath = DockerFetcherPlugin::getBlobPath(
+      directory,
+      Path(strings::replace(uri.path(), "/", "\\")).basename());
+#else
+  const string blobPath = DockerFetcherPlugin::getBlobPath(
+      directory,
+      Path(uri.path()).basename());
+#endif
   return download(url, blobPath, headers, stallTimeout);
 }
 
@@ -932,14 +923,12 @@ Future<Nothing> DockerFetcherPluginProcess::fetchBlob(
         return Nothing();
       }
 
-      Future<Nothing> failure = Failure(
-          "Unexpected HTTP response '" + http::Status::string(code) + "' "
-          "when trying to download the blob");
-
 #ifdef __WINDOWS__
       return urlFetchBlob(uri, directory, blobUri, authHeaders);
 #else
-      return failure;
+      return Failure(
+          "Unexpected HTTP response '" + http::Status::string(code) + "' "
+          "when trying to download the blob");
 #endif
     }));
 }
@@ -979,15 +968,14 @@ Future<Nothing> DockerFetcherPluginProcess::_fetchBlob(
                 return Nothing();
               }
 
-              Future<Nothing> failure = Failure(
+#ifdef __WINDOWS__
+              return urlFetchBlob(uri, directory, blobUri, authHeaders);
+#else
+              return Failure(
                   "Unexpected HTTP response '" + http::Status::string(code) +
                   "' when trying to download blob '" +
                   strings::trim(stringify(blobUri)) +
                   "' with schema 1 manifest");
-#ifdef __WINDOWS__
-              return urlFetchBlob(uri, directory, blobUri, authHeaders);
-#else
-              return failure;
 #endif
             }));
         }));
@@ -1162,7 +1150,7 @@ URI DockerFetcherPluginProcess::getManifestUri(const URI& uri)
 
   return uri::construct(
       scheme,
-      path::join("/v2", uri.path(), "manifests", uri.query()),
+      strings::join("/", "/v2", uri.path(), "manifests", uri.query()),
       uri.host(),
       (uri.has_port() ? Option<int>(uri.port()) : None()));
 }
@@ -1177,7 +1165,7 @@ URI DockerFetcherPluginProcess::getBlobUri(const URI& uri)
 
   return uri::construct(
       scheme,
-      path::join("/v2", uri.path(), "blobs", uri.query()),
+      strings::join("/", "/v2", uri.path(), "blobs", uri.query()),
       uri.host(),
       (uri.has_port() ? Option<int>(uri.port()) : None()));
 }
