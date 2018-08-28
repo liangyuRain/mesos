@@ -64,6 +64,7 @@ using mesos::internal::slave::AUFS_BACKEND;
 using mesos::internal::slave::BIND_BACKEND;
 using mesos::internal::slave::COPY_BACKEND;
 using mesos::internal::slave::OVERLAY_BACKEND;
+using mesos::internal::slave::WCLAYER_BACKEND;
 
 using mesos::slave::ContainerLayers;
 using mesos::slave::ContainerState;
@@ -81,6 +82,7 @@ namespace slave {
 // | overlay | ext4 xfs     | btrfs aufs overlay overlay2 zfs eCryptfs |
 // | bind    |              | N/A(`--sandbox_directory' must exist)    |
 // | copy    |              | N/A                                      |
+// | wclayer |              | N/A                                      |
 // +---------+--------------+------------------------------------------+
 static Try<Nothing> validateBackend(
     const string& backend,
@@ -90,6 +92,12 @@ static Try<Nothing> validateBackend(
   if (backend == COPY_BACKEND) {
     return Nothing();
   }
+
+#ifdef __WINDOWS__
+  if (backend == WCLAYER_BACKEND) {
+    return Nothing();
+  }
+#endif // __WINDOWS__
 
 #ifdef __linux__
   // Bind backend is supported on all underlying filesystems.
@@ -268,6 +276,9 @@ Try<Owned<Provisioner>> Provisioner::create(
       OVERLAY_BACKEND,
       AUFS_BACKEND,
 #endif // __linux__
+#ifdef __WINDOWS__
+      WCLAYER_BACKEND,
+#endif // __WINDOWS__
       COPY_BACKEND
     };
 
