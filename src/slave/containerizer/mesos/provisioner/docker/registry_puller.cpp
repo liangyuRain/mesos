@@ -30,6 +30,7 @@
 
 #include "common/command_utils.hpp"
 
+#include "uri/fetchers/docker.hpp"
 #include "uri/schemes/docker.hpp"
 
 #include "slave/containerizer/mesos/provisioner/docker/paths.hpp"
@@ -40,6 +41,8 @@ namespace spec = docker::spec;
 
 using std::string;
 using std::vector;
+
+using mesos::uri::DockerFetcherPlugin;
 
 using process::Failure;
 using process::Future;
@@ -358,7 +361,9 @@ Future<vector<string>> RegistryPullerProcess::___pull(
   // sure ids are unique.
   hashset<string> uniqueIds;
   vector<string> layerIds;
+#ifndef __WINDOWS__
   vector<Future<Nothing>> futures;
+#endif
 
   // The order of `fslayers` should be [child, parent, ...].
   //
@@ -375,9 +380,7 @@ Future<vector<string>> RegistryPullerProcess::___pull(
       continue;
     }
 
-    // NOTE: We put parent layer ids in front because that's what the
-    // provisioner backends assume.
-    layerIds.insert(layerIds.begin(), v1.id());
+    layerIds.emplace_back(v1.id());
     uniqueIds.insert(v1.id());
 
     // Skip if the layer is already in the store.
@@ -387,7 +390,7 @@ Future<vector<string>> RegistryPullerProcess::___pull(
     }
 
     const string layerPath = path::join(directory, v1.id());
-    const string tar = path::join(directory, blobSum);
+    const string tar = DockerFetcherPlugin::getBlobPath(directory, blobSum);
     const string rootfs = paths::getImageLayerRootfsPath(layerPath, backend);
     const string json = paths::getImageLayerManifestPath(layerPath);
 
@@ -409,15 +412,29 @@ Future<vector<string>> RegistryPullerProcess::___pull(
           v1.id() + "': " + write.error());
     }
 
+#ifdef __WINDOWS__
+    // In Windows, we need to keep the extracted layers where they are
+    // in order to successfully mount the scratch layer, so we cannot
+    // extract them to staging directory, since it will be destroyed
+    // before provisioning. Therefore, we do not extract them until
+    // provisioning.
+    Try<Nothing> move = os::rename(tar, path::join(rootfs, "tar"));
+    if (move.isError()) {
+      return Failure("Failed to move the layer tar: " + move.error());
+    }
+#else
     futures.push_back(command::untar(Path(tar), Path(rootfs)));
+#endif // __WINDOWS__
   }
 
+#ifdef __WINDOWS__
+  return vector<string>(layerIds.crbegin(), layerIds.crend());
+#else
   return collect(futures)
     .then([=]() -> Future<vector<string>> {
       // Remove the tarballs after the extraction.
       foreach (const string& blobSum, blobSums) {
-        const string tar = path::join(directory, blobSum);
-
+        const string tar = DockerFetcherPlugin::getBlobPath(directory, blobSum);
         Try<Nothing> rm = os::rm(tar);
         if (rm.isError()) {
           return Failure(
@@ -426,8 +443,11 @@ Future<vector<string>> RegistryPullerProcess::___pull(
         }
       }
 
-      return layerIds;
+      // NOTE: We reverse the vector to put parent layer ids in front
+      // because that's what the provisioner backends assume.
+      return vector<string>(layerIds.crbegin(), layerIds.crend());
     });
+#endif // __WINDOWS__
 }
 
 
