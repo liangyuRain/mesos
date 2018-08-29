@@ -33,6 +33,9 @@
 #ifdef __linux__
 #include "slave/containerizer/mesos/provisioner/backends/overlay.hpp"
 #endif
+#ifdef __WINDOWS__
+#include "slave/containerizer/mesos/provisioner/backends/wclayer.hpp"
+#endif
 
 using namespace process;
 
@@ -65,6 +68,10 @@ hashmap<string, Owned<Backend>> Backend::create(const Flags& flags)
     creators.put(OVERLAY_BACKEND, &OverlayBackend::create);
   }
 #endif // __linux__
+
+#ifdef __WINDOWS__
+  creators.put(WCLAYER_BACKEND, &WclayerBackend::create);
+#endif // __WINDOWS__
 
   creators.put(COPY_BACKEND, &CopyBackend::create);
 

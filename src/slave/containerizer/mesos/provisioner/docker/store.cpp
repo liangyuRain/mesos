@@ -481,12 +481,26 @@ Future<Nothing> StoreProcess::moveLayer(
 
   if (!os::exists(target)) {
     // This is the case that we pull the layer for the first time.
+#ifdef __WINDOWS__
+    // Windows does not allow to rename file if the target already exists or
+    // the parent folder of the target does not exist.
+    const string parent = Path(target).dirname();
+    if (!os::exists(parent)) {
+      Try<Nothing> mkdir = os::mkdir(parent);
+      if (mkdir.isError()) {
+        return Failure(
+            "Failed to create directory in store for layer '" +
+            layerId + "': " + mkdir.error());
+      }
+    }
+#else
     Try<Nothing> mkdir = os::mkdir(target);
     if (mkdir.isError()) {
       return Failure(
           "Failed to create directory in store for layer '" +
           layerId + "': " + mkdir.error());
     }
+#endif
 
     Try<Nothing> rename = os::rename(source, target);
     if (rename.isError()) {
